@@ -2,6 +2,16 @@
 import logging
 import time
 from abc import ABC, abstractmethod
+from datetime import date, datetime
+
+
+def to_ak_date(value) -> str:
+    """把 date / datetime / ISO 字符串统一成 AkShare 需要的 YYYYMMDD"""
+    if isinstance(value, datetime):
+        return value.strftime("%Y%m%d")
+    if isinstance(value, date):
+        return value.strftime("%Y%m%d")
+    return str(value).replace("-", "").replace("/", "")
 
 
 class BaseCollector(ABC):
@@ -38,6 +48,11 @@ class BaseCollector(ABC):
                 return True
             except Exception as e:
                 self.logger.warning("第 %s 次重试: %s", attempt, e)
+                # 回滚失败事务，否则后续重试报 current transaction is aborted
+                try:
+                    self.db.rollback()
+                except Exception:
+                    pass
                 if attempt < self.max_retries:
                     time.sleep(self.retry_delay)
         self.logger.error("采集失败，已达最大重试次数")

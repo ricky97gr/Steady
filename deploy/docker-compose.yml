@@ -22,6 +22,9 @@ services:
       context: ../collector
       dockerfile: Dockerfile
     container_name: quant-collector
+    environment:
+      # 定时任务按北京时间触发（APScheduler 使用本地时区）
+      TZ: Asia/Shanghai
     env_file:
       - .env
     depends_on:
@@ -37,6 +40,9 @@ services:
       context: ../quant-engine
       dockerfile: Dockerfile
     container_name: quant-engine
+    environment:
+      # 定时任务按北京时间触发（APScheduler 使用本地时区）
+      TZ: Asia/Shanghai
     env_file:
       - .env
     depends_on:
