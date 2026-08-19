@@ -62,9 +62,9 @@ docker exec -i quant-postgres psql -U quant -d quant_system < postgres/init.sql
 
 | 阶段 | 内容 | 状态 |
 |------|------|------|
-| Sprint 0 | 工程初始化（仓库/DB/部署骨架） | 进行中 |
-| Sprint 1 | 数据中心（采集/回填/质量校验） | 待开发 |
-| Sprint 2 | 查询服务（股票/K线 API） | 待开发 |
+| Sprint 0 | 工程初始化（仓库/DB/部署骨架） | ✅ 完成 |
+| Sprint 1 | 数据中心（采集/回填/质量校验） | ✅ 完成 |
+| Sprint 2 | 查询服务（股票/K线 API） | ✅ 完成 |
 | Sprint 3 | 前端基础（列表/K线图表） | 待开发 |
 | Sprint 4 | 策略框架（因子/评分/轮动信号） | 待开发 |
 | Sprint 5 | 模拟交易（A股规则/净值快照） | 待开发 |

@@ -15,6 +15,8 @@ func SetupRouter(db *gorm.DB, log *zap.Logger) *gin.Engine {
 	r.Use(gin.Logger(), gin.Recovery())
 
 	stockRepo := repository.NewStockRepository(db)
+	dailyRepo := repository.NewDailyRepository(db)
+	financialRepo := repository.NewFinancialRepository(db)
 	accountRepo := repository.NewAccountRepository(db)
 	orderRepo := repository.NewOrderRepository(db)
 
@@ -25,6 +27,9 @@ func SetupRouter(db *gorm.DB, log *zap.Logger) *gin.Engine {
 
 		// 股票相关
 		v1.GET("/stocks", handler.GetStockList(stockRepo))
+		v1.GET("/stocks/:code", handler.GetStockDetail(stockRepo, dailyRepo, financialRepo))
+		v1.GET("/stocks/:code/financial", handler.GetFinancialList(financialRepo, stockRepo))
+		v1.GET("/kline/:code", handler.GetKline(dailyRepo, stockRepo))
 	}
 
 	// 占位引用，避免 Sprint 0 未使用告警
