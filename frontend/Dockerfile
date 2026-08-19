@@ -11,5 +11,7 @@ RUN npm run build
 # ---- 运行阶段：Nginx 托管静态文件 ----
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
+# 反代 /api → backend 容器 + SPA fallback（localhost:3000 验收链路必需）
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

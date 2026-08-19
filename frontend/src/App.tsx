@@ -10,6 +10,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 
 import DashboardPage from './pages/Dashboard'
 import StockPoolPage from './pages/StockPool'
+import StockDetailPage from './pages/StockDetail'
 import StrategyPage from './pages/Strategy'
 import TradePage from './pages/Trade'
 
@@ -67,6 +68,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/stocks" element={<StockPoolPage />} />
+          <Route path="/stocks/:code" element={<StockDetailPage />} />
           <Route path="/strategy" element={<StrategyPage />} />
           <Route path="/trade" element={<TradePage />} />
         </Routes>
