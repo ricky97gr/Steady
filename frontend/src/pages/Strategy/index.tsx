@@ -24,23 +24,28 @@ const ACTION_OPTIONS = [
 
 export default function StrategyPage() {
   const [action, setAction] = useState<'BUY' | 'SELL' | 'HOLD' | undefined>()
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
   const [reloadTick, setReloadTick] = useState(0)
   const [tradeDate, setTradeDate] = useState('')
   const [items, setItems] = useState<StrategySignal[]>([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    getSignals({ action, limit: 500 })
+    getSignals({ action, page, page_size: pageSize })
       .then((d) => {
         if (cancelled) return
         setTradeDate(d.trade_date)
         setItems(d.items)
+        setTotal(d.total)
       })
       .catch(() => {
         if (cancelled) return
         setItems([])
+        setTotal(0)
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -48,7 +53,7 @@ export default function StrategyPage() {
     return () => {
       cancelled = true
     }
-  }, [action, reloadTick])
+  }, [action, page, pageSize, reloadTick])
 
   const columns: ColumnsType<StrategySignal> = [
     {
@@ -123,14 +128,17 @@ export default function StrategyPage() {
                 placeholder="全部信号"
                 style={{ width: 130 }}
                 options={ACTION_OPTIONS}
-                onChange={(v) => setAction(v)}
+                onChange={(v) => {
+                  setAction(v)
+                  setPage(1)
+                }}
               />
             }
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: '#8a97ab', fontSize: 12 }}>
               <span>信号日期：{tradeDate || '--'}</span>
               <span>·</span>
-              <span>共 {items.length} 条（评分降序）</span>
+              <span>共 {total} 条（评分降序）</span>
               <span style={{ marginLeft: 'auto' }}>
                 <a onClick={() => setReloadTick((t) => t + 1)}>
                   <ReloadOutlined /> 刷新
@@ -143,7 +151,18 @@ export default function StrategyPage() {
               dataSource={items}
               size="small"
               loading={loading}
-              pagination={false}
+              pagination={{
+                current: page,
+                pageSize,
+                total,
+                showSizeChanger: true,
+                pageSizeOptions: [20, 50, 100, 200],
+                showTotal: (t) => `共 ${t} 条`,
+                onChange: (p, ps) => {
+                  setPage(p)
+                  setPageSize(ps)
+                },
+              }}
               locale={{ emptyText: <Empty description="暂无信号（因子/信号任务尚未运行或当日非交易日）" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
             />
           </Card>

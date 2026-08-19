@@ -67,20 +67,42 @@ func (r *SignalRepository) GetLatestSignalDate(strategy string) (*time.Time, err
 // GetSignals 指定策略+日期的信号（评分降序；date 零值表示不限定；action 可选过滤）
 func (r *SignalRepository) GetSignals(strategy string, date time.Time,
 	action string, limit int) ([]SignalItem, error) {
-	q := r.db.Table("strategy_signal").
+	items, _, err := r.getSignals(strategy, date, action, 1, limit)
+	return items, err
+}
+
+// GetSignalsPage 信号分页（评分降序），返回 (items, total)
+func (r *SignalRepository) GetSignalsPage(strategy string, date time.Time,
+	action string, page, pageSize int) ([]SignalItem, int64, error) {
+	return r.getSignals(strategy, date, action, page, pageSize)
+}
+
+func (r *SignalRepository) getSignals(strategy string, date time.Time,
+	action string, page, pageSize int) ([]SignalItem, int64, error) {
+	// 过滤条件独立建 query：Count 与数据查询共用
+	filter := func(q *gorm.DB) *gorm.DB {
+		q = q.Where("strategy_signal.strategy_name = ?", strategy)
+		if !date.IsZero() {
+			q = q.Where("strategy_signal.trade_date = ?", date)
+		}
+		if action != "" {
+			q = q.Where("strategy_signal.action = ?", action)
+		}
+		return q
+	}
+	var total int64
+	if err := filter(r.db.Table("strategy_signal")).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var items []SignalItem
+	err := filter(r.db.Table("strategy_signal")).
 		Select("strategy_signal.code, stock_basic.name, strategy_signal.score, "+
 			"strategy_signal.action, strategy_signal.reason").
 		Joins("LEFT JOIN stock_basic ON stock_basic.code = strategy_signal.code").
-		Where("strategy_signal.strategy_name = ?", strategy)
-	if !date.IsZero() {
-		q = q.Where("strategy_signal.trade_date = ?", date)
-	}
-	if action != "" {
-		q = q.Where("strategy_signal.action = ?", action)
-	}
-	var items []SignalItem
-	err := q.Order("strategy_signal.score DESC").Limit(limit).Scan(&items).Error
-	return items, err
+		Order("strategy_signal.score DESC").
+		Offset((page - 1) * pageSize).Limit(pageSize).
+		Scan(&items).Error
+	return items, total, err
 }
 
 // GetSignalsByCode 个股信号历史（按日期倒序，limit 条）

@@ -188,13 +188,17 @@ export interface SignalsData {
   strategy: string
   trade_date: string // '' = 尚无信号
   items: StrategySignal[]
+  total: number
+  page: number
+  page_size: number
 }
 
 export interface SignalQuery {
   strategy?: string
   date?: string
   action?: 'BUY' | 'SELL' | 'HOLD'
-  limit?: number
+  page?: number
+  page_size?: number
 }
 
 // 策略定义（factor_weights 与 params 由 strategy 表 JSON 列反序列化）

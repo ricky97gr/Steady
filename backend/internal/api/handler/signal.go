@@ -33,8 +33,8 @@ func GetStrategies(signalRepo *repository.SignalRepository) gin.HandlerFunc {
 	}
 }
 
-// GetSignals 策略信号列表
-// ?strategy=multi_factor&date=2026-08-19&action=BUY&limit=100
+// GetSignals 策略信号列表（分页）
+// ?strategy=multi_factor&date=2026-08-19&action=BUY&page=1&page_size=100
 // date 缺省 = 最近一期；无信号返回空 items（仍 200）
 func GetSignals(signalRepo *repository.SignalRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -44,12 +44,16 @@ func GetSignals(signalRepo *repository.SignalRepository) gin.HandlerFunc {
 			response.Fail(c, http.StatusBadRequest, response.CodeInvalidParam, "action 参数错误")
 			return
 		}
-		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
-		if limit < 1 {
-			limit = 100
+		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+		if page < 1 {
+			page = 1
 		}
-		if limit > 500 {
-			limit = 500
+		pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "100"))
+		if pageSize < 1 {
+			pageSize = 100
+		}
+		if pageSize > 500 {
+			pageSize = 500
 		}
 
 		var date time.Time
@@ -69,13 +73,14 @@ func GetSignals(signalRepo *repository.SignalRepository) gin.HandlerFunc {
 			if latest == nil {
 				response.OK(c, gin.H{
 					"strategy": strategy, "trade_date": "", "items": []gin.H{},
+					"total": 0, "page": page, "page_size": pageSize,
 				})
 				return
 			}
 			date = *latest
 		}
 
-		items, err := signalRepo.GetSignals(strategy, date, action, limit)
+		items, total, err := signalRepo.GetSignalsPage(strategy, date, action, page, pageSize)
 		if err != nil {
 			response.Fail(c, http.StatusInternalServerError, response.CodeInternalError, "查询失败")
 			return
@@ -89,6 +94,7 @@ func GetSignals(signalRepo *repository.SignalRepository) gin.HandlerFunc {
 		}
 		response.OK(c, gin.H{
 			"strategy": strategy, "trade_date": formatDate(date), "items": out,
+			"total": total, "page": page, "page_size": pageSize,
 		})
 	}
 }
