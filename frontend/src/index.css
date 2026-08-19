@@ -1,0 +1,155 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  background: linear-gradient(180deg, #eef2fa 0%, #f2f5fb 40%, #f7f9fd 100%);
+  min-height: 100vh;
+}
+
+/* 页面容器 */
+.page-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 页面标题栏 */
+.page-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.page-head h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #1f2d3d;
+}
+
+.page-head span {
+  color: #8a97ab;
+  font-size: 13px;
+}
+
+/* 深色侧边栏 */
+.app-sider {
+  background: #13224a !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.app-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 24px;
+  color: #fff;
+}
+
+.app-logo .logo-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #1d39c4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.app-logo .logo-text {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.app-logo .logo-sub {
+  font-size: 11px;
+  opacity: 0.55;
+  margin-top: 2px;
+}
+
+/* 菜单项 hover/选中（克制风格） */
+.app-sider .ant-menu-item {
+  border-radius: 8px;
+  margin: 4px 12px;
+}
+
+.app-sider .ant-menu-item-selected {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* 统计卡片 */
+.stat-card {
+  position: relative;
+  overflow: hidden;
+  border: none !important;
+  border-radius: 14px !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 28px rgba(29, 57, 196, 0.15) !important;
+}
+
+.stat-card .stat-icon {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.stat-card .ant-statistic-title {
+  color: rgba(255, 255, 255, 0.85) !important;
+  font-size: 13px;
+}
+
+.stat-card .ant-statistic-content {
+  color: #fff !important;
+  font-weight: 600;
+}
+
+.stat-card .stat-footer {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+/* 渐变卡片配色 */
+.stat-card.blue { background: linear-gradient(135deg, #1d39c4 0%, #3d63f5 100%); }
+.stat-card.green { background: linear-gradient(135deg, #0e7a3d 0%, #3ecf7a 100%); }
+.stat-card.orange { background: linear-gradient(135deg, #d4720a 0%, #f5a623 100%); }
+.stat-card.purple { background: linear-gradient(135deg, #5b21b6 0%, #8b5cf6 100%); }
+
+/* 通用卡片微调 */
+.ant-card {
+  border-color: #e6ecf5 !important;
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c7d2e4;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8b6cf;
+}

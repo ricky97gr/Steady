@@ -4,6 +4,7 @@ import {
   FundOutlined,
   LineChartOutlined,
   SwapOutlined,
+  RiseOutlined,
 } from '@ant-design/icons'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
@@ -12,14 +13,21 @@ import StockPoolPage from './pages/StockPool'
 import StrategyPage from './pages/Strategy'
 import TradePage from './pages/Trade'
 
-const { Header, Content } = Layout
+const { Sider, Content } = Layout
 
 const menuItems = [
-  { key: '/dashboard', icon: <DashboardOutlined />, label: '首页' },
+  { key: '/dashboard', icon: <DashboardOutlined />, label: '数据总览' },
   { key: '/stocks', icon: <FundOutlined />, label: '股票池' },
   { key: '/strategy', icon: <LineChartOutlined />, label: '策略' },
   { key: '/trade', icon: <SwapOutlined />, label: '模拟交易' },
 ]
+
+const pageTitles: Record<string, string> = {
+  '/dashboard': '数据总览',
+  '/stocks': '股票池',
+  '/strategy': '策略',
+  '/trade': '模拟交易',
+}
 
 export default function App() {
   const navigate = useNavigate()
@@ -30,28 +38,31 @@ export default function App() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Header style={{ display: 'flex', alignItems: 'center' }}>
-        <div
-          style={{
-            color: '#fff',
-            fontSize: 18,
-            fontWeight: 600,
-            marginRight: 48,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          Quant Dashboard
+      <Sider width={260} className="app-sider" theme="dark">
+        <div className="app-logo">
+          <div className="logo-icon">
+            <RiseOutlined />
+          </div>
+          <div>
+            <div className="logo-text">STEADY 量化</div>
+            <div className="logo-sub">个人 A 股量化交易系统</div>
+          </div>
         </div>
         <Menu
           theme="dark"
-          mode="horizontal"
+          mode="inline"
           selectedKeys={[selectedKey]}
           items={menuItems}
           onClick={({ key }) => navigate(key)}
-          style={{ flex: 1, minWidth: 0 }}
+          style={{ background: 'transparent', border: 'none', marginTop: 12 }}
         />
-      </Header>
-      <Content style={{ padding: 24 }}>
+      </Sider>
+      <Content style={{ padding: '24px 28px' }}>
+        <div className="page-head">
+          <h2>{pageTitles[selectedKey] ?? '数据总览'}</h2>
+          <span>Steady Quant · V1.0</span>
+        </div>
+        <div style={{ height: 16 }} />
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
