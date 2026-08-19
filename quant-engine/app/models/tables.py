@@ -153,3 +153,39 @@ class StrategySignal(Base):
     action = Column(String(10))  # BUY / SELL / HOLD
     reason = Column(String)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class BacktestJob(Base):
+    """回测任务（pending → running → done/failed；同参数唯一幂等）"""
+
+    __tablename__ = "backtest_job"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    strategy_name = Column(String(64), nullable=False, default="multi_factor")
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    top_n = Column(Integer, nullable=False, default=20)
+    status = Column(String(16), nullable=False, default="pending")
+    error = Column(String)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    finished_at = Column(DateTime(timezone=True))
+
+
+class BacktestResult(Base):
+    """回测结果（指标 + 净值序列 JSONB，job 删除级联）"""
+
+    __tablename__ = "backtest_result"
+
+    job_id = Column(BigInteger, primary_key=True)
+    total_return = Column(Numeric(10, 4))
+    annualized_return = Column(Numeric(10, 4))
+    max_drawdown = Column(Numeric(10, 4))
+    sharpe = Column(Numeric(10, 4))
+    trading_days = Column(Integer)
+    final_value = Column(Numeric(14, 2))
+    trades = Column(Integer)
+    positions = Column(Integer)
+    benchmark_return = Column(Numeric(10, 4))
+    excess_return = Column(Numeric(10, 4))
+    nav = Column(JSON)  # JSONB [{"date","nav","benchmark"}]
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

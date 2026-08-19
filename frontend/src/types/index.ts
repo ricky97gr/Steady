@@ -210,7 +210,55 @@ export interface StrategiesData {
   items: StrategyInfo[]
 }
 
-// 个股信号历史（个股页 tab，按日期倒序）
+// ---- 指数基准 + 回测（Sprint 6）----
+
+export interface IndexNavItem {
+  trade_date: string // YYYY-MM-DD
+  nav: number // 归一化净值（close/区间首日 close）
+}
+
+export interface IndexNavData {
+  code: string
+  items: IndexNavItem[]
+}
+
+export type BacktestStatus = 'pending' | 'running' | 'done' | 'failed'
+
+export interface BacktestNavItem {
+  date: string
+  nav: number
+  benchmark: number | null // 指数缺失日 null
+}
+
+export interface BacktestJobItem {
+  id: number
+  strategy_name: string
+  start_date: string // YYYY-MM-DD
+  end_date: string
+  top_n: number
+  status: BacktestStatus
+  error: string
+  created_at: string
+  finished_at: string
+  // 结果指标（done 后非零）
+  total_return: number
+  annualized_return: number
+  max_drawdown: number
+  sharpe: number
+  trading_days: number
+  final_value: number
+  trades: number
+  positions: number
+  benchmark_return: number
+  excess_return: number
+  nav: BacktestNavItem[] // 详情接口才有
+}
+
+export interface BacktestsData {
+  items: BacktestJobItem[]
+}
+
+// ---- 个股信号历史（个股页 tab，按日期倒序）----
 export interface SignalHistoryItem {
   trade_date: string
   score: number

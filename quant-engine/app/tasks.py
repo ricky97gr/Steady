@@ -117,12 +117,24 @@ def job_daily_report():
     logger.info("生成日报任务触发（待 Sprint 6 实现）")
 
 
+def job_consume_backtests():
+    """回测任务消费者：每 5 分钟领取 pending 任务并落库（APScheduler 线程池执行，
+    与 19:00/19:30 任务并行不冲突——回测只读因子/行情，不写 factor_value）"""
+    from app.backtest_service import consume_pending
+
+    try:
+        consume_pending()
+    except Exception:
+        logger.exception("回测任务消费失败")
+
+
 if __name__ == "__main__":
     scheduler = BlockingScheduler()
 
     scheduler.add_job(job_calc_factors, "cron", hour=19, minute=0)
     scheduler.add_job(job_generate_signals, "cron", hour=19, minute=30)
     scheduler.add_job(job_daily_report, "cron", hour=21, minute=0)
+    scheduler.add_job(job_consume_backtests, "interval", minutes=5)
 
     logger.info("quant-engine 调度器启动，等待定时任务...")
     scheduler.start()

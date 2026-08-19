@@ -121,15 +121,26 @@ class BacktestEngine:
             qty = self._calc_quantity(price)
             if qty <= 0:
                 return
-            # 涨停检查 + 100股整手 + 资金校验（Broker 内完成）
-            ok = self.broker.execute_buy(
-                self.portfolio, signal.code, price, qty,
-                prev_close=self._get_prev_close(signal.code, date),
-                trade_date=date)
-            if ok:
+            # 涨停检查 + 100股整手 + 资金校验（Broker 内完成）；
+            # 滑点+佣金可能超出预算（top_n 全量买入时现金趋近预算），
+            # 与 Go 模拟盘一致按 100 股递减重试，减到 0 放弃
+            filled = 0
+            while qty > 0:
+                try:
+                    ok = self.broker.execute_buy(
+                        self.portfolio, signal.code, price, qty,
+                        prev_close=self._get_prev_close(signal.code, date),
+                        trade_date=date)
+                except ValueError:
+                    ok = False
+                if ok:
+                    filled = qty
+                    break
+                qty -= 100
+            if filled > 0:
                 self.portfolio.trades.append(
                     {"date": date, "code": signal.code, "action": "BUY",
-                     "price": round(price, 2), "qty": qty})
+                     "price": round(price, 2), "qty": filled})
         elif signal.action == "SELL":
             price = self._get_price(signal.code, date)
             pos = self.portfolio.positions.get(signal.code)
@@ -177,4 +188,9 @@ class BacktestEngine:
             report["benchmark"] = bm
             report["excess_return"] = round(
                 report["portfolio"]["total_return"] - bm["total_return"], 4)
+        # 净值序列（date/nav/benchmark，benchmark 缺失日 None）——落库/前端画图用
+        report["nav_series"] = [
+            {"date": r["date"], "nav": r["nav"], "benchmark": r["benchmark"]}
+            for r in self.daily_returns
+        ]
         return report

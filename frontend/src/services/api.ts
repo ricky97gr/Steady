@@ -5,7 +5,10 @@ import type {
   AccountNavData,
   Adjust,
   ApiResponse,
+  BacktestJobItem,
+  BacktestsData,
   FinancialListData,
+  IndexNavData,
   KLineData,
   OrdersData,
   PositionsData,
@@ -121,6 +124,35 @@ export async function getTrades(params?: { page?: number; page_size?: number }):
   return resp.data.data
 }
 
+// ---- 指数基准 + 回测（Sprint 6）----
+
+export async function getIndexNav(
+  code: string,
+  params?: { start?: string; end?: string },
+): Promise<IndexNavData> {
+  const resp = await http.get<ApiResponse<IndexNavData>>(`/index/nav/${code}`, { params })
+  return resp.data.data
+}
+
+export async function getBacktests(limit = 20): Promise<BacktestsData> {
+  const resp = await http.get<ApiResponse<BacktestsData>>('/backtests', { params: { limit } })
+  return resp.data.data
+}
+
+export async function getBacktest(id: number): Promise<BacktestJobItem> {
+  const resp = await http.get<ApiResponse<BacktestJobItem>>(`/backtests/${id}`)
+  return resp.data.data
+}
+
+export async function submitBacktest(req: {
+  start_date: string
+  end_date: string
+  top_n: number
+}): Promise<{ job_id: number; status: string }> {
+  const resp = await http.post<ApiResponse<{ job_id: number; status: string }>>('/backtests', req)
+  return resp.data.data
+}
+
 export const api = {
   getStocks,
   getStockDetail,
@@ -134,4 +166,8 @@ export const api = {
   getPositions,
   getOrders,
   getTrades,
+  getIndexNav,
+  getBacktests,
+  getBacktest,
+  submitBacktest,
 }

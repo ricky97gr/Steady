@@ -1,5 +1,6 @@
 import { Layout, Menu } from 'antd'
 import {
+  BarChartOutlined,
   DashboardOutlined,
   FundOutlined,
   LineChartOutlined,
@@ -13,6 +14,7 @@ import StockPoolPage from './pages/StockPool'
 import StockDetailPage from './pages/StockDetail'
 import StrategyPage from './pages/Strategy'
 import TradePage from './pages/Trade'
+import BacktestPage from './pages/Backtest'
 
 const { Sider, Content } = Layout
 
@@ -21,6 +23,7 @@ const menuItems = [
   { key: '/stocks', icon: <FundOutlined />, label: '股票池' },
   { key: '/strategy', icon: <LineChartOutlined />, label: '策略' },
   { key: '/trade', icon: <SwapOutlined />, label: '模拟交易' },
+  { key: '/backtest', icon: <BarChartOutlined />, label: '策略回测' },
 ]
 
 const pageTitles: Record<string, string> = {
@@ -28,6 +31,7 @@ const pageTitles: Record<string, string> = {
   '/stocks': '股票池',
   '/strategy': '策略',
   '/trade': '模拟交易',
+  '/backtest': '策略回测',
 }
 
 export default function App() {
@@ -71,6 +75,7 @@ export default function App() {
           <Route path="/stocks/:code" element={<StockDetailPage />} />
           <Route path="/strategy" element={<StrategyPage />} />
           <Route path="/trade" element={<TradePage />} />
+          <Route path="/backtest" element={<BacktestPage />} />
         </Routes>
       </Content>
     </Layout>

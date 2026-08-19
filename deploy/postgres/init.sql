@@ -143,6 +143,9 @@ CREATE TABLE IF NOT EXISTS strategy_signal (
 
 CREATE INDEX IF NOT EXISTS idx_strategy_signal
     ON strategy_signal (strategy_name, trade_date DESC);
+-- 幂等 upsert 依赖的唯一键（generate_signals ON CONFLICT (strategy_name, code, trade_date)）
+CREATE UNIQUE INDEX IF NOT EXISTS uq_strategy_signal
+    ON strategy_signal (strategy_name, code, trade_date);
 
 -- ------------------------------------------------------------
 -- 8. 账户
@@ -280,3 +283,37 @@ INSERT INTO strategy (name, description, factor_weights, params) VALUES (
 INSERT INTO account (name, cash, total_asset, market_value, profit, profit_rate)
 SELECT '主账户', 100000.00, 100000.00, 0.00, 0.00, 0.0000
 WHERE NOT EXISTS (SELECT 1 FROM account);
+
+-- ------------------------------------------------------------
+-- 14. 回测任务 / 结果（Sprint 6）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS backtest_job (
+    id            BIGSERIAL     PRIMARY KEY,
+    strategy_name VARCHAR(64)   NOT NULL DEFAULT 'multi_factor',
+    start_date    DATE          NOT NULL,
+    end_date      DATE          NOT NULL,
+    top_n         INT           NOT NULL DEFAULT 20,
+    status        VARCHAR(16)   NOT NULL DEFAULT 'pending',  -- pending/running/done/failed
+    error         TEXT,
+    created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    finished_at   TIMESTAMPTZ
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_backtest_job
+    ON backtest_job (strategy_name, start_date, end_date, top_n);
+
+CREATE TABLE IF NOT EXISTS backtest_result (
+    job_id            BIGINT        PRIMARY KEY REFERENCES backtest_job (id) ON DELETE CASCADE,
+    total_return      DECIMAL(10,4),
+    annualized_return DECIMAL(10,4),
+    max_drawdown      DECIMAL(10,4),
+    sharpe            DECIMAL(10,4),
+    trading_days      INT,
+    final_value       DECIMAL(14,2),
+    trades            INT,
+    positions         INT,
+    benchmark_return  DECIMAL(10,4),
+    excess_return     DECIMAL(10,4),
+    nav               JSONB,  -- [{"date":"...","nav":1.0,"benchmark":1.0|null},...]
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

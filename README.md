@@ -68,4 +68,4 @@ docker exec -i quant-postgres psql -U quant -d quant_system < postgres/init.sql
 | Sprint 3 | 前端基础（列表/K线图表） | ✅ 完成 |
 | Sprint 4 | 策略框架（因子/评分/轮动信号） | ✅ 完成 |
 | Sprint 5 | 模拟交易（A股规则/净值快照） | ✅ 完成 |
-| Sprint 6 | Dashboard 完善（收益曲线/报告） | 待开发 |
+| Sprint 6 | Dashboard 完善（收益曲线/回测） | ✅ 完成 |

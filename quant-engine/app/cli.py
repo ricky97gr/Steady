@@ -60,30 +60,26 @@ def cmd_signals(args) -> bool:
 
 
 def cmd_backtest(args) -> bool:
-    from sqlalchemy import select
-
     from app.backtest.engine import BacktestEngine
-    from app.backtest.replay import ReplayStrategy
+    from app.backtest_service import build_replay_strategy, create_job, run_and_save
     from app.db import get_session
-    from app.models.tables import FactorDefinition, Strategy
 
     db = get_session()
-    defs = list(db.execute(
-        select(FactorDefinition).where(FactorDefinition.name.in_(
-            ["ma_trend", "macd_signal", "pe_ratio", "pb_ratio",
-             "roe_quality", "debt_risk"]))).scalars())
-    weights = {d.name: float(d.weight) for d in defs}
-    categories = {d.name: d.category for d in defs}
+    start = date.fromisoformat(args.start)
+    end = date.fromisoformat(args.end)
+    if args.save:
+        # 任务队列：提交 job（幂等）并同步执行落库
+        job = create_job(db, start, end, args.top_n or 20)
+        if job.status == "done":
+            print(f"回测任务 #{job.id} 已有结果（done），无需重跑")
+            db.close()
+            return True
+        run_and_save(db, job)  # failed 已在 create_job 中重置为 pending，同步重跑
+        print(f"回测任务 #{job.id} 已保存：{job.status}")
+        db.close()
+        return job.status == "done"
 
-    params = {}
-    row = db.execute(select(Strategy).where(Strategy.name == "multi_factor")
-                     ).scalar()
-    if row is not None and row.params:
-        params = dict(row.params)
-    if args.top_n:
-        params["top_n"] = args.top_n
-
-    strategy = ReplayStrategy(db, params, weights, categories)
+    strategy = build_replay_strategy(db, args.top_n)
     engine = BacktestEngine(strategy, args.start, args.end, db=db)
     report = engine.run()
 
@@ -122,6 +118,8 @@ def main():
     p_b.add_argument("--end", default=date.today().isoformat(),
                      help="结束日 YYYY-MM-DD")
     p_b.add_argument("--top-n", type=int, help="目标持仓数（默认取策略配置 20）")
+    p_b.add_argument("--save", action="store_true",
+                     help="提交回测任务并写入 backtest_job/backtest_result（默认仅打印报告）")
 
     args = parser.parse_args()
 

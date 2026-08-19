@@ -23,6 +23,8 @@ func SetupRouter(db *gorm.DB, tradingSvc *service.TradingService,
 	signalRepo := repository.NewSignalRepository(db)
 	positionRepo := repository.NewPositionRepository(db)
 	tradeRepo := repository.NewTradeRepository(db)
+	backtestRepo := repository.NewBacktestRepository(db)
+	backtestSvc := service.NewBacktestService(backtestRepo)
 
 	// 基础路径 /api/v1
 	v1 := r.Group("/api/v1")
@@ -48,6 +50,12 @@ func SetupRouter(db *gorm.DB, tradingSvc *service.TradingService,
 		v1.POST("/orders", handler.PlaceOrder(tradingSvc, accountRepo))
 		v1.DELETE("/orders/:id", handler.CancelOrder(tradingSvc, accountRepo))
 		v1.GET("/trades", handler.GetTrades(tradeRepo, accountRepo))
+
+		// 指数基准 + 回测任务（Sprint 6）
+		v1.GET("/index/nav/:code", handler.GetIndexNav(dailyRepo))
+		v1.GET("/backtests", handler.GetBacktests(backtestSvc))
+		v1.POST("/backtests", handler.CreateBacktest(backtestSvc))
+		v1.GET("/backtests/:id", handler.GetBacktestDetail(backtestSvc))
 	}
 
 	return r
