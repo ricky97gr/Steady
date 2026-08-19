@@ -1,0 +1,55 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ===== Go 后端测试 =====
+  go-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - run: cd backend && go mod download
+      - run: cd backend && go vet ./...
+      - run: cd backend && go test -v ./...
+
+  # ===== Python 测试 =====
+  python-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [collector, quant-engine]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: cd ${{ matrix.service }} && pip install -r requirements.txt pytest
+      - run: cd ${{ matrix.service }} && python -m pytest tests/ -v
+
+  # ===== 前端测试与构建 =====
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: cd frontend && npm ci
+      - run: cd frontend && npm run lint
+      - run: cd frontend && npm run build
+
+  # ===== Docker 镜像构建 =====
+  docker-build:
+    needs: [go-test, python-test, frontend-build]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose -f deploy/docker-compose.yml build

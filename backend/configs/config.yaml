@@ -1,0 +1,52 @@
+# Backend Service 配置
+# 敏感信息通过环境变量覆盖（DB_PASSWORD 等）
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: 10s
+  write_timeout: 10s
+
+database:
+  host: "postgres"
+  port: 5432
+  user: "quant"
+  password: ""
+  name: "quant_system"
+  max_conns: 50
+  max_idle: 10
+
+log:
+  level: "info"
+  format: json
+  max_size: 100   # MB
+  max_backups: 7
+  max_age: 30     # days
+
+account:
+  initial_cash: 100000
+  commission_rate: 0.00025   # 万2.5
+  min_commission: 5.0        # 最低5元
+  stamp_tax_rate: 0.0005     # 印花税 万5（仅卖出）
+  slippage: 0.001            # 滑点 0.1%
+
+strategy:
+  multi_factor:
+    enabled: true
+    universe: "hs300+zz500"  # 股票池（沪深300 + 中证500）
+    top_n: 20                # 目标持仓数
+    buy_buffer: 15           # 未持仓且排名<=15 → BUY
+    sell_buffer: 30          # 已持仓且排名>30 → SELL
+    max_position_pct: 0.20   # 单股仓位上限
+    weights:
+      trend: 0.40
+      value: 0.30
+      quality: 0.20
+      risk: 0.10
+
+# V1 不启用 Redis（Phase 2 引入：缓存 / 策略信号传递）
+# redis:
+#   host: ${REDIS_HOST:-redis}
+#   port: ${REDIS_PORT:-6379}
+#   password: ${REDIS_PASSWORD:-}
+#   db: 0

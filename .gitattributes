@@ -1,0 +1,12 @@
+* text=auto
+
+*.md text
+*.go text
+*.py text
+*.ts text
+*.tsx text
+*.sql text
+*.yaml text
+*.yml text
+*.json text
+*.sh text eol=lf

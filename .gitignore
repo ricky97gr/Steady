@@ -1,0 +1,41 @@
+# ---- 环境变量与密钥 ----
+.env
+*.env.local
+*.pem
+*.key
+
+# ---- Go ----
+backend/bin/
+*.exe
+*.test
+*.out
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv*/
+venv/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Node / 前端 ----
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+npm-debug.log*
+
+# ---- 数据与日志 ----
+*.log
+logs/
+data/
+backup*.sql
+
+# ---- IDE / 系统 ----
+.vscode/
+.idea/
+.DS_Store
+
+# ---- 数据库快照 ----
+*.dump
