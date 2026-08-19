@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.collectors import backfill as bf_mod
 from app.collectors.backfill import BackfillJob
-from app.models.tables import Base, DailyPrice, StockBasic
+from app.models.tables import Base, DailyPrice, DailyValuation, StockBasic
 
 
 def make_db():
@@ -85,6 +85,32 @@ def test_daily_dry_run_does_not_fetch(monkeypatch):
     result = BackfillJob(db, dry_run=True).daily(date(2026, 8, 1), date(2026, 8, 20))
     assert len(result["todo"]) == 2
     assert result["covered"] == 0
+
+
+def test_valuation_skips_latest(monkeypatch):
+    """估值回填：max(trade_date) >= 今日 → 跳过；否则全量拉取"""
+    db = make_db()
+    seed(db)
+    # 600519 已有今日估值 → 跳过；000001 无估值 → 待拉取
+    db.add(DailyValuation(id=1, code="600519", trade_date=date.today(), pe_ttm=20.1))
+    db.commit()
+
+    calls = []
+    sleeps = []
+
+    class FakeValuation:
+        def __init__(self, s):
+            pass
+
+        def run(self, code):
+            calls.append(code)
+            return True
+
+    monkeypatch.setattr(bf_mod, "ValuationCollector", FakeValuation)
+    monkeypatch.setattr(bf_mod.time, "sleep", sleeps.append)
+    stats = BackfillJob(db, rate_limit=0).valuation()
+    assert calls == ["000001"]
+    assert stats["done"] == 1
 
 
 def test_verify_reports_low_coverage(monkeypatch):

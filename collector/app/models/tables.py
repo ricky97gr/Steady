@@ -72,6 +72,23 @@ class FinancialIndicator(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class DailyValuation(Base):
+    """每日估值（东财：PE(TTM)/PE(静)/PB/市值，Sprint 4 新增）"""
+
+    __tablename__ = "daily_valuation"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    code = Column(String(10), nullable=False)
+    trade_date = Column(Date, nullable=False)
+    close = Column(Numeric(10, 2))
+    total_mv = Column(Numeric(18, 2))  # 总市值（元）
+    float_mv = Column(Numeric(18, 2))  # 流通市值（元）
+    pe_ttm = Column(Numeric(12, 4))  # 市盈率 TTM
+    pe_static = Column(Numeric(12, 4))  # 市盈率（静态）
+    pb = Column(Numeric(12, 4))  # 市净率
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class TradeCalendar(Base):
     """交易日历"""
 

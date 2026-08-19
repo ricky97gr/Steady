@@ -94,6 +94,38 @@ def job_sync_finance():
     )
 
 
+def job_sync_valuation():
+    """16:45 同步日度估值：股票池（接口无日期参数，全量拉取 upsert 幂等）"""
+    from app.collectors.valuation import ValuationCollector
+    from app.models.tables import DailyValuation, StockBasic
+
+    db = get_session()
+    latest = {
+        code: max_d
+        for code, max_d in db.execute(
+            select(DailyValuation.code, func.max(DailyValuation.trade_date))
+            .group_by(DailyValuation.code)
+        ).all()
+    }
+    codes = sorted(
+        db.execute(
+            select(StockBasic.code).where(
+                StockBasic.universe.in_(("hs300", "zz500"))
+            )
+        ).scalars().all()
+    )
+    todo = [c for c in codes if latest.get(c) is None or latest[c] < date.today()]
+    logger.info("估值同步：%s 只中 %s 只需更新", len(codes), len(todo))
+    ok = fail = 0
+    for code in todo:
+        if ValuationCollector(db).run(code):
+            ok += 1
+        else:
+            fail += 1
+        time.sleep(DAILY_SYNC_INTERVAL)
+    logger.info("估值同步完成：成功 %s，失败 %s", ok, fail)
+
+
 if __name__ == "__main__":
     scheduler = BlockingScheduler()
 
@@ -101,6 +133,7 @@ if __name__ == "__main__":
     scheduler.add_job(job_sync_calendar, "cron", hour=9, minute=5)
     scheduler.add_job(job_sync_index, "cron", hour=16, minute=15)
     scheduler.add_job(job_sync_daily_price, "cron", hour=16, minute=30)
+    scheduler.add_job(job_sync_valuation, "cron", hour=16, minute=45)
     scheduler.add_job(job_sync_finance, "cron", hour=18, minute=0)
 
     logger.info("collector 调度器启动，等待定时任务...")

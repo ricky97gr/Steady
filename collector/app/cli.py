@@ -7,8 +7,10 @@
     python -m app.cli sync-daily          # 全部待同步股票当日行情（股票池 + 已有数据）
     python -m app.cli sync-daily --code 600519 [--start 20260801] [--end 20260819]
     python -m app.cli sync-finance [--quarters 4]
+    python -m app.cli sync-valuation [--codes 600519,000001]
     python -m app.cli backfill [--start 20160801] [--end 20260819] [--quarters 20]
                                 [--codes 600519,000001] [--dry-run]
+    python -m app.cli backfill-valuation [--codes 600519,000001] [--dry-run]
 """
 import argparse
 import logging
@@ -93,6 +95,29 @@ def cmd_backfill(args):
     return True
 
 
+def cmd_sync_valuation(args):
+    """同步日度估值（跳过当日已最新的股票）"""
+    from app.collectors.valuation import sync_valuation
+
+    codes = None
+    if args.codes:
+        codes = [c.strip().zfill(6) for c in args.codes.split(",")]
+    return sync_valuation(codes)
+
+
+def cmd_backfill_valuation(args):
+    """估值回填（全量拉取，断点续传按 max(trade_date) 判定）"""
+    from app.collectors.backfill import BackfillJob
+    from app.config import BACKFILL_BATCH_SIZE, RATE_LIMIT_SECONDS
+    from app.db import get_session
+
+    job = BackfillJob(get_session(), rate_limit=RATE_LIMIT_SECONDS,
+                      batch_size=BACKFILL_BATCH_SIZE, dry_run=args.dry_run)
+    codes = [c.strip().zfill(6) for c in args.codes.split(",")] if args.codes else None
+    job.valuation(codes)
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(prog="quant-collector")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -116,6 +141,13 @@ def main():
     p_back.add_argument("--codes", help="只回填指定代码（逗号分隔）")
     p_back.add_argument("--dry-run", action="store_true")
 
+    p_va = sub.add_parser("sync-valuation", help="增量同步日度估值")
+    p_va.add_argument("--codes", help="只同步指定代码（逗号分隔）")
+
+    p_bv = sub.add_parser("backfill-valuation", help="估值回填（全量拉取）")
+    p_bv.add_argument("--codes", help="只回填指定代码（逗号分隔）")
+    p_bv.add_argument("--dry-run", action="store_true")
+
     args = parser.parse_args()
 
     try:
@@ -134,6 +166,10 @@ def main():
             ok = cmd_sync_finance(args)
         elif args.cmd == "backfill":
             ok = cmd_backfill(args)
+        elif args.cmd == "sync-valuation":
+            ok = cmd_sync_valuation(args)
+        elif args.cmd == "backfill-valuation":
+            ok = cmd_backfill_valuation(args)
         else:
             parser.error(f"未知命令: {args.cmd}")
         sys.exit(0 if ok else 1)

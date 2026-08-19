@@ -14,7 +14,8 @@ from sqlalchemy import func, select
 
 from app.collectors.daily import DailyCollector
 from app.collectors.finance import FinanceCollector, quarter_ends
-from app.models.tables import DailyPrice, StockBasic
+from app.collectors.valuation import ValuationCollector
+from app.models.tables import DailyPrice, DailyValuation, StockBasic
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,44 @@ class BackfillJob:
             logger.warning("回填校验：%s 只股票行数偏少（<10），可能停牌或上市较晚：%s",
                            len(low), [c for c, _ in low[:20]])
         logger.info("回填完成：%s", self.stats)
+
+    # ---------- 估值数据回填 ----------
+
+    def valuation(self, codes: list[str] | None = None) -> dict:
+        """回填日度估值（东财，全量拉取 upsert 幂等）
+
+        覆盖判定按 max(trade_date) >= 今日：每日同步会更新当日估值，
+        但接口无日期参数，回填本质是"拉全量"，已最新的股票无需重拉。
+        """
+        from datetime import date
+
+        codes = codes or self.pool_codes()
+        latest = {
+            code: max_d
+            for code, max_d in self.db.execute(
+                select(DailyValuation.code, func.max(DailyValuation.trade_date))
+                .group_by(DailyValuation.code)
+            ).all()
+        }
+        today = date.today()
+        todo = [c for c in codes if latest.get(c) is None or latest[c] < today]
+        logger.info("估值回填：股票池 %s 只，已完成 %s 只，待回填 %s 只",
+                    len(codes), len(latest), len(todo))
+        if self.dry_run:
+            logger.info("[dry-run] 估值回填 %s 只：%s", len(todo), ",".join(todo[:10]))
+            return {"todo": todo, "covered": len(latest)}
+        for i, code in enumerate(todo, 1):
+            ok = ValuationCollector(self.db).run(code)
+            if not ok:
+                self.stats["failed"] += 1
+                logger.error("估值回填失败：%s", code)
+            else:
+                self.stats["done"] += 1
+            if i % self.batch_size == 0:
+                logger.info("估值回填进度 %s/%s：%s", i, len(todo), self.stats)
+            time.sleep(self.rate_limit)
+        logger.info("估值回填完成：%s", self.stats)
+        return self.stats
 
     # ---------- 财务数据回填 ----------
 

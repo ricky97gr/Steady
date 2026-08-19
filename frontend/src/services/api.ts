@@ -5,6 +5,10 @@ import type {
   ApiResponse,
   FinancialListData,
   KLineData,
+  SignalHistoryData,
+  SignalQuery,
+  SignalsData,
+  StrategiesData,
   StockDetail,
   StockListData,
   StockListQuery,
@@ -68,4 +72,29 @@ export async function getFinancial(code: string, limit = 20): Promise<FinancialL
   return resp.data.data
 }
 
-export const api = { getStocks, getStockDetail, getKline, getFinancial }
+export async function getStrategies(): Promise<StrategiesData> {
+  const resp = await http.get<ApiResponse<StrategiesData>>('/strategies')
+  return resp.data.data
+}
+
+export async function getSignals(params: SignalQuery): Promise<SignalsData> {
+  const resp = await http.get<ApiResponse<SignalsData>>('/signals', { params })
+  return resp.data.data
+}
+
+export async function getSignalsByCode(code: string, limit = 50): Promise<SignalHistoryData> {
+  const resp = await http.get<ApiResponse<SignalHistoryData>>(`/signals/${code}`, {
+    params: { limit },
+  })
+  return resp.data.data
+}
+
+export const api = {
+  getStocks,
+  getStockDetail,
+  getKline,
+  getFinancial,
+  getStrategies,
+  getSignals,
+  getSignalsByCode,
+}

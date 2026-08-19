@@ -44,6 +44,19 @@ func (r *DailyRepository) GetLatest(code string) (*model.DailyPrice, error) {
 	return &bar, nil
 }
 
+// GetLatestValuation 最近一日估值（详情页日度 PE/PB），无数据返回 (nil, nil)
+func (r *DailyRepository) GetLatestValuation(code string) (*model.DailyValuation, error) {
+	var v model.DailyValuation
+	err := r.db.Where("code = ?", code).Order("trade_date DESC").First(&v).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
 // GetLatestFactor 该股全量最新非空复权因子（前复权锚点，跨查询区间），无数据返回 (0, false, nil)
 func (r *DailyRepository) GetLatestFactor(code string) (float64, bool, error) {
 	var bar model.DailyPrice

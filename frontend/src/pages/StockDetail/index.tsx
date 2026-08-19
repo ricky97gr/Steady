@@ -17,17 +17,11 @@ function universeLabel(u: string) {
   return '候选'
 }
 
-// 财务字段：百分比字段用 formatPct（原始百分数，≤0 视为缺失）；倍数字段 0 视为缺失
-function ratio(v: number): string {
-  return v > 0 ? formatAmount(v) : '--'
-}
-
-// 财务数值字段（字符串字段不入摘要统计卡）
+// 财务字段：百分比字段用 formatPct（原始百分数，≤0 视为缺失）
+// 注：PE/PB 无季度财务来源，已移至最新行情卡的日度估值（daily_valuation）
 type FinNumberKey = Exclude<keyof FinancialItem, 'report_date' | 'announce_date'>
 
 const SUMMARY_ITEMS: { key: FinNumberKey; label: string; fmt: (v: number) => string }[] = [
-  { key: 'pe', label: 'PE', fmt: ratio },
-  { key: 'pb', label: 'PB', fmt: ratio },
   { key: 'roe', label: 'ROE', fmt: formatPct },
   { key: 'profit_growth', label: '净利润增速', fmt: formatPct },
   { key: 'revenue_growth', label: '营收增速', fmt: formatPct },
@@ -38,8 +32,6 @@ const SUMMARY_ITEMS: { key: FinNumberKey; label: string; fmt: (v: number) => str
 const FINANCIAL_COLUMNS: ColumnsType<FinancialItem> = [
   { title: '报告期', dataIndex: 'report_date', width: 110 },
   { title: '公告日', dataIndex: 'announce_date', width: 110 },
-  { title: 'PE', dataIndex: 'pe', width: 80, render: ratio },
-  { title: 'PB', dataIndex: 'pb', width: 80, render: ratio },
   { title: 'ROE', dataIndex: 'roe', width: 90, render: formatPct },
   { title: '净利润增速', dataIndex: 'profit_growth', width: 110, render: formatPct },
   { title: '营收增速', dataIndex: 'revenue_growth', width: 110, render: formatPct },
@@ -125,6 +117,7 @@ export default function StockDetailPage() {
 
   const bar = detail.latest_bar
   const summary = detail.financial_summary
+  const val = detail.valuation
 
   return (
     <div className="page-container">
@@ -177,6 +170,24 @@ export default function StockDetailPage() {
                 <Col span={12} style={{ marginTop: 12 }}>
                   <Statistic title="成交额" value={formatWanYi(bar.amount)} valueStyle={{ fontSize: 15 }} />
                 </Col>
+                {val && (
+                  <>
+                    <Col span={12} style={{ marginTop: 12 }}>
+                      <Statistic
+                        title={`PE(TTM)（${val.trade_date}）`}
+                        value={val.pe_ttm > 0 ? formatAmount(val.pe_ttm) : '--'}
+                        valueStyle={{ fontSize: 15 }}
+                      />
+                    </Col>
+                    <Col span={12} style={{ marginTop: 12 }}>
+                      <Statistic
+                        title="PB"
+                        value={val.pb > 0 ? formatAmount(val.pb) : '--'}
+                        valueStyle={{ fontSize: 15 }}
+                      />
+                    </Col>
+                  </>
+                )}
               </Row>
             ) : (
               <Empty description="行情数据待回填" image={Empty.PRESENTED_IMAGE_SIMPLE} />

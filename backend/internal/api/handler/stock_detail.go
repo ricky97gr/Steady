@@ -9,8 +9,8 @@ import (
 	"quant-system/backend/pkg/response"
 )
 
-// GetStockDetail 股票详情：基本信息 + 最新行情 + 财务摘要（公告日最新）
-// 仅股票不存在返回 404；行情/财务未回填时对应字段为 null（仍 200）
+// GetStockDetail 股票详情：基本信息 + 最新行情 + 财务摘要 + 日度估值（公告日最新）
+// 仅股票不存在返回 404；行情/财务/估值未回填时对应字段为 null（仍 200）
 func GetStockDetail(stockRepo *repository.StockRepository,
 	dailyRepo *repository.DailyRepository,
 	financialRepo *repository.FinancialRepository) gin.HandlerFunc {
@@ -42,6 +42,11 @@ func GetStockDetail(stockRepo *repository.StockRepository,
 			response.Fail(c, http.StatusInternalServerError, response.CodeInternalError, "查询失败")
 			return
 		}
+		val, err := dailyRepo.GetLatestValuation(code)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, response.CodeInternalError, "查询失败")
+			return
+		}
 
 		dto := stockDetailDTO{StockBasicDTO: toStockBasicDTO(*stock)}
 		if latest != nil {
@@ -51,6 +56,13 @@ func GetStockDetail(stockRepo *repository.StockRepository,
 		if fin != nil {
 			f := toFinancialDTO(*fin)
 			dto.FinancialSummary = &f
+		}
+		if val != nil {
+			dto.Valuation = &valuationDTO{
+				TradeDate: formatDate(val.TradeDate),
+				PeTtm:     val.PeTtm,
+				Pb:        val.Pb,
+			}
 		}
 		response.OK(c, dto)
 	}

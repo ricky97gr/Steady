@@ -22,3 +22,20 @@ def create_db_engine() -> Engine:
 def get_session() -> Session:
     factory = sessionmaker(bind=create_db_engine())
     return factory()
+
+
+def upsert(session: Session, model, rows: list[dict],
+           conflict_cols: list[str], update_cols: list[str]) -> int:
+    """Postgres INSERT ... ON CONFLICT DO UPDATE（与 collector/app/db.py 同模式）"""
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    if not rows:
+        return 0
+    stmt = pg_insert(model).values(list(rows))
+    stmt = stmt.on_conflict_do_update(
+        index_elements=list(conflict_cols),
+        set_={col: stmt.excluded[col] for col in update_cols},
+    )
+    session.execute(stmt)
+    session.commit()
+    return len(rows)

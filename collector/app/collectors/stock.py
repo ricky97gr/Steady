@@ -28,12 +28,14 @@ def normalize_stock_rows(df) -> list[dict]:
     rows = []
     for _, r in df.iterrows():
         code = str(r["code"]).zfill(6)
+        # 交易所原始名称带空格（如"南 京 港"），去掉以支持前端模糊搜索
+        name = str(r["name"]).replace(" ", "").replace("　", "")
         rows.append(
             {
                 "code": code,
-                "name": r["name"],
+                "name": name,
                 "market": infer_market(code),
-                "status": "D" if "退" in str(r["name"]) else "L",
+                "status": "D" if "退" in name else "L",
                 # industry 由财务采集器顺带回填；list_date AkShare 免费接口不提供
             }
         )

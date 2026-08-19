@@ -67,6 +67,25 @@ CREATE INDEX IF NOT EXISTS idx_financial_code_announce
     ON financial_indicator (code, announce_date);
 
 -- ------------------------------------------------------------
+-- 3.5 每日估值（Sprint 4 新增：日度 PE/PB/市值，东财 stock_value_em）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS daily_valuation (
+    id         BIGSERIAL     PRIMARY KEY,
+    code       VARCHAR(10)   NOT NULL REFERENCES stock_basic (code),
+    trade_date DATE          NOT NULL,
+    close      DECIMAL(10,2),                -- 收盘价（元）
+    total_mv   DECIMAL(18,2),                -- 总市值（元）
+    float_mv   DECIMAL(18,2),                -- 流通市值（元）
+    pe_ttm     DECIMAL(12,4),                -- 市盈率 TTM
+    pe_static  DECIMAL(12,4),                -- 市盈率（静态）
+    pb         DECIMAL(12,4),                -- 市净率
+    created_at TIMESTAMP     DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_daily_valuation_code_date
+    ON daily_valuation (code, trade_date);
+
+-- ------------------------------------------------------------
 -- 4. 因子定义
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS factor_definition (

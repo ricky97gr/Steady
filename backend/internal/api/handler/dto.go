@@ -41,11 +41,19 @@ type financialDTO struct {
 	GrossMargin   float64 `json:"gross_margin"`
 }
 
-// stockDetailDTO 股票详情：基本信息 + 最新行情 + 财务摘要（未回填时为 null）
+// valuationDTO 每日估值（日度 PE(TTM)/PB，未回填时 detail.Valuation 为 null）
+type valuationDTO struct {
+	TradeDate string  `json:"trade_date"`
+	PeTtm     float64 `json:"pe_ttm"`
+	Pb        float64 `json:"pb"`
+}
+
+// stockDetailDTO 股票详情：基本信息 + 最新行情 + 财务摘要 + 日度估值（未回填时为 null）
 type stockDetailDTO struct {
 	StockBasicDTO
 	LatestBar        *klineItem    `json:"latest_bar"`
 	FinancialSummary *financialDTO `json:"financial_summary"`
+	Valuation        *valuationDTO `json:"valuation"`
 }
 
 // formatDate 日期格式化为 YYYY-MM-DD，零值返回空串

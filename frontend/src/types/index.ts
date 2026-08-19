@@ -63,9 +63,17 @@ export interface FinancialListData {
   items: FinancialItem[]
 }
 
+// 每日估值（日度 PE(TTM)/PB，Sprint 4 daily_valuation 回填后可用）
+export interface Valuation {
+  trade_date: string // YYYY-MM-DD
+  pe_ttm: number
+  pb: number
+}
+
 export interface StockDetail extends StockBasic {
   latest_bar: KLineItem | null // 行情未回填时为 null
   financial_summary: FinancialItem | null // 财务未回填时为 null
+  valuation: Valuation | null // 日度估值未回填时为 null
 }
 
 export interface StockListQuery {
@@ -101,10 +109,50 @@ export interface PositionItem {
   profit_rate: number
 }
 
+// 策略信号（列表项：含股票代码/名称）
 export interface StrategySignal {
   code: string
   name: string
   score: number
   action: 'BUY' | 'SELL' | 'HOLD'
   reason: string
+}
+
+export interface SignalsData {
+  strategy: string
+  trade_date: string // '' = 尚无信号
+  items: StrategySignal[]
+}
+
+export interface SignalQuery {
+  strategy?: string
+  date?: string
+  action?: 'BUY' | 'SELL' | 'HOLD'
+  limit?: number
+}
+
+// 策略定义（factor_weights 与 params 由 strategy 表 JSON 列反序列化）
+export interface StrategyInfo {
+  name: string
+  description: string
+  factor_weights: Record<string, number>
+  params: Record<string, unknown>
+  status: string
+}
+
+export interface StrategiesData {
+  items: StrategyInfo[]
+}
+
+// 个股信号历史（个股页 tab，按日期倒序）
+export interface SignalHistoryItem {
+  trade_date: string
+  score: number
+  action: 'BUY' | 'SELL' | 'HOLD'
+  reason: string
+}
+
+export interface SignalHistoryData {
+  code: string
+  items: SignalHistoryItem[]
 }
