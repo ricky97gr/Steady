@@ -8,6 +8,7 @@ import KLineChart from '../../components/KLineChart'
 import { getFinancial, getStockDetail } from '../../services/api'
 import type { FinancialItem, Market, StockDetail as StockDetailData } from '../../types'
 import { formatAmount, formatPct, formatWanYi } from '../../utils/format'
+import { tablePagination } from '../../utils/table'
 
 const MARKET_LABEL: Record<Market, string> = { SH: '沪市', SZ: '深市', BJ: '北交所' }
 
@@ -55,7 +56,7 @@ export default function StockDetailPage() {
     setLoading(true)
     setNotFound(false)
     setError('')
-    Promise.all([getStockDetail(code), getFinancial(code, 20)])
+    Promise.all([getStockDetail(code), getFinancial(code, 100)])
       .then(([d, f]) => {
         if (cancelled) return
         setDetail(d)
@@ -225,7 +226,7 @@ export default function StockDetailPage() {
           columns={FINANCIAL_COLUMNS}
           dataSource={financial}
           size="small"
-          pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (t) => `共 ${t} 期` }}
+          pagination={tablePagination()}
           locale={{ emptyText: '暂无财务数据' }}
         />
       </Card>

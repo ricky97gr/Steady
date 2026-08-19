@@ -6,6 +6,7 @@ import { SearchOutlined } from '@ant-design/icons'
 
 import { getStocks } from '../../services/api'
 import type { Market, SortField, StockBasic, StockListQuery, Universe } from '../../types'
+import { tablePagination } from '../../utils/table'
 
 const MARKET_META: Record<Market, { label: string; color: string }> = {
   SH: { label: '沪市', color: 'blue' },
@@ -155,18 +156,13 @@ export default function StockPoolPage() {
         loading={loading}
         columns={columns}
         dataSource={items}
-        pagination={{
-          current: query.page,
-          total,
-          pageSize: 20,
-          showSizeChanger: false,
-          showTotal: (t) => `共 ${t} 条`,
-        }}
+        pagination={tablePagination({ current: query.page, pageSize: query.page_size, total })}
         onChange={(pagination, _filters, sorter) => {
           const s = Array.isArray(sorter) ? sorter[0] : sorter
           setQuery((q) => ({
             ...q,
             page: pagination.current ?? 1,
+            page_size: pagination.pageSize ?? 20,
             sort: s?.order ? (s.columnKey as SortField) : undefined,
             order: s?.order === 'ascend' ? 'asc' : s?.order === 'descend' ? 'desc' : undefined,
           }))

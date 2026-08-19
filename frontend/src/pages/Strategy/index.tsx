@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom'
 
 import { getSignals } from '../../services/api'
 import type { StrategySignal } from '../../types'
+import { tablePagination } from '../../utils/table'
 
 const FACTOR_WEIGHTS = [
   { name: '趋势（ma_trend + macd_signal）', weight: 40, color: '#1d39c4' },
@@ -25,7 +26,7 @@ const ACTION_OPTIONS = [
 export default function StrategyPage() {
   const [action, setAction] = useState<'BUY' | 'SELL' | 'HOLD' | undefined>()
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(50)
+  const [pageSize, setPageSize] = useState(20)
   const [reloadTick, setReloadTick] = useState(0)
   const [tradeDate, setTradeDate] = useState('')
   const [items, setItems] = useState<StrategySignal[]>([])
@@ -152,12 +153,7 @@ export default function StrategyPage() {
               size="small"
               loading={loading}
               pagination={{
-                current: page,
-                pageSize,
-                total,
-                showSizeChanger: true,
-                pageSizeOptions: [20, 50, 100, 200],
-                showTotal: (t) => `共 ${t} 条`,
+                ...tablePagination({ current: page, pageSize, total }),
                 onChange: (p, ps) => {
                   setPage(p)
                   setPageSize(ps)

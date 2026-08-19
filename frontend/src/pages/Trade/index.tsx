@@ -15,6 +15,7 @@ import { useEChart } from '../../hooks/useEChart'
 import { getAccount, getAccountNav, getOrders, getPositions, getTrades } from '../../services/api'
 import type { AccountData, AccountNavItem, OrderItem, PositionItem, TradeItem } from '../../types'
 import { formatAmount, formatPercent } from '../../utils/format'
+import { tablePagination } from '../../utils/table'
 
 // A 股红涨绿跌
 const UP = '#cf1322'
@@ -107,7 +108,14 @@ export default function TradePage() {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    Promise.all([getAccount(), getAccountNav(), getPositions(), getOrders(), getTrades()])
+    // 客户端分页：一次拉满上限，翻页/切页大小不反复请求
+    Promise.all([
+      getAccount(),
+      getAccountNav(),
+      getPositions(),
+      getOrders({ page_size: 100 }),
+      getTrades({ page_size: 100 }),
+    ])
       .then(([acc, nav, pos, ord, trd]) => {
         if (cancelled) return
         setAccount(acc)
@@ -368,7 +376,7 @@ export default function TradePage() {
                   dataSource={positions}
                   loading={loading}
                   size="small"
-                  pagination={false}
+                  pagination={tablePagination()}
                   locale={{ emptyText: '暂无持仓，等待策略信号自动建仓' }}
                 />
               ),
@@ -383,7 +391,7 @@ export default function TradePage() {
                   dataSource={orders}
                   loading={loading}
                   size="small"
-                  pagination={{ pageSize: 10, showSizeChanger: false }}
+                  pagination={tablePagination()}
                   locale={{ emptyText: '暂无委托记录' }}
                 />
               ),
@@ -398,7 +406,7 @@ export default function TradePage() {
                   dataSource={trades}
                   loading={loading}
                   size="small"
-                  pagination={{ pageSize: 10, showSizeChanger: false }}
+                  pagination={tablePagination()}
                   locale={{ emptyText: '暂无成交记录' }}
                 />
               ),

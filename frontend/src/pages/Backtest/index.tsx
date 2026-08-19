@@ -28,6 +28,7 @@ import StatCard from '../../components/StatCard'
 import { useEChart } from '../../hooks/useEChart'
 import { getBacktest, getBacktests, submitBacktest } from '../../services/api'
 import type { BacktestJobItem, BacktestNavItem } from '../../types'
+import { tablePagination } from '../../utils/table'
 
 const { RangePicker } = DatePicker
 
@@ -126,7 +127,7 @@ export default function BacktestPage() {
     let cancelled = false
     setLoading(true)
     Promise.all([
-      getBacktests(20),
+      getBacktests(100),
       selected?.id ? getBacktest(selected.id).catch(() => null) : Promise.resolve(null),
     ])
       .then(([list, detail]) => {
@@ -270,7 +271,7 @@ export default function BacktestPage() {
               dataSource={jobs}
               loading={loading}
               size="small"
-              pagination={false}
+              pagination={tablePagination()}
               onRow={(j) => ({
                 onClick: () => setSelected(j),
                 style: { cursor: 'pointer' },
