@@ -2,15 +2,16 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 	"gorm.io/gorm"
 
 	"quant-system/backend/internal/api/handler"
 	"quant-system/backend/internal/repository"
+	"quant-system/backend/internal/service"
 )
 
 // SetupRouter 注册全部路由
-func SetupRouter(db *gorm.DB, log *zap.Logger) *gin.Engine {
+func SetupRouter(db *gorm.DB, tradingSvc *service.TradingService,
+	navSvc *service.NavService, initialCash float64) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 
@@ -20,6 +21,8 @@ func SetupRouter(db *gorm.DB, log *zap.Logger) *gin.Engine {
 	accountRepo := repository.NewAccountRepository(db)
 	orderRepo := repository.NewOrderRepository(db)
 	signalRepo := repository.NewSignalRepository(db)
+	positionRepo := repository.NewPositionRepository(db)
+	tradeRepo := repository.NewTradeRepository(db)
 
 	// 基础路径 /api/v1
 	v1 := r.Group("/api/v1")
@@ -36,12 +39,16 @@ func SetupRouter(db *gorm.DB, log *zap.Logger) *gin.Engine {
 		v1.GET("/strategies", handler.GetStrategies(signalRepo))
 		v1.GET("/signals", handler.GetSignals(signalRepo))
 		v1.GET("/signals/:code", handler.GetSignalsByCode(signalRepo, stockRepo))
-	}
 
-	// 占位引用，避免 Sprint 0 未使用告警
-	_ = accountRepo
-	_ = orderRepo
-	_ = log
+		// 模拟交易（Sprint 5）
+		v1.GET("/account", handler.GetAccount(accountRepo, initialCash))
+		v1.GET("/account/nav", handler.GetAccountNav(navSvc, accountRepo))
+		v1.GET("/positions", handler.GetPositions(positionRepo, accountRepo, stockRepo))
+		v1.GET("/orders", handler.GetOrders(orderRepo, accountRepo))
+		v1.POST("/orders", handler.PlaceOrder(tradingSvc, accountRepo))
+		v1.DELETE("/orders/:id", handler.CancelOrder(tradingSvc, accountRepo))
+		v1.GET("/trades", handler.GetTrades(tradeRepo, accountRepo))
+	}
 
 	return r
 }

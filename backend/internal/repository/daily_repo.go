@@ -57,6 +57,48 @@ func (r *DailyRepository) GetLatestValuation(code string) (*model.DailyValuation
 	return &v, nil
 }
 
+// GetByDate 指定交易日行情；当日停牌/无数据返回 (nil, nil)
+func (r *DailyRepository) GetByDate(code string, tradeDate time.Time) (*model.DailyPrice, error) {
+	var bar model.DailyPrice
+	err := r.db.Where("code = ? AND trade_date = ?", code, tradeDate).First(&bar).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &bar, nil
+}
+
+// GetPrevClose 前一交易日收盘价（涨跌停判断），无数据返回 (0, false, nil)
+func (r *DailyRepository) GetPrevClose(code string, tradeDate time.Time) (float64, bool, error) {
+	var bar model.DailyPrice
+	err := r.db.Select("close").
+		Where("code = ? AND trade_date < ?", code, tradeDate).
+		Order("trade_date DESC").
+		First(&bar).Error
+	if err == gorm.ErrRecordNotFound {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return bar.Close, true, nil
+}
+
+// GetLatestTradeDate 全市场最近交易日（自动下单日期基准）；无数据返回 (nil, nil)
+func (r *DailyRepository) GetLatestTradeDate() (*time.Time, error) {
+	var bar model.DailyPrice
+	err := r.db.Order("trade_date DESC").First(&bar).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &bar.TradeDate, nil
+}
+
 // GetLatestFactor 该股全量最新非空复权因子（前复权锚点，跨查询区间），无数据返回 (0, false, nil)
 func (r *DailyRepository) GetLatestFactor(code string) (float64, bool, error) {
 	var bar model.DailyPrice

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"quant-system/backend/internal/model"
 )
@@ -33,4 +34,20 @@ func (r *AccountRepository) GetPrimary() (*model.Account, error) {
 		return nil, err
 	}
 	return &acc, nil
+}
+
+// LockByID 行级锁读取（ExecuteDay 事务内防并发重复执行）
+func (r *AccountRepository) LockByID(id uint64) (*model.Account, error) {
+	var acc model.Account
+	err := r.db.Clauses(clause.Locking{Strength: "UPDATE"}).
+		First(&acc, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &acc, nil
+}
+
+// Update 保存账户变更
+func (r *AccountRepository) Update(acc *model.Account) error {
+	return r.db.Save(acc).Error
 }

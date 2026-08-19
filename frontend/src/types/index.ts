@@ -87,26 +87,92 @@ export interface StockListQuery {
   order?: 'asc' | 'desc'
 }
 
-export interface AccountInfo {
-  id: number
+// ---- 模拟交易（Sprint 5）----
+
+export interface AccountData {
+  account_id: number
   name: string
   cash: number
-  total_asset: number
   market_value: number
+  total_asset: number
   profit: number
   profit_rate: number
   max_drawdown: number
+  initial_cash: number
+}
+
+export interface AccountNavItem {
+  trade_date: string // YYYY-MM-DD
+  total_asset: number
+  nav: number
+  daily_return: number
+  drawdown: number
+}
+
+export interface AccountNavData {
+  items: AccountNavItem[]
 }
 
 export interface PositionItem {
   code: string
+  name: string
   quantity: number
-  available_qty: number
+  available_qty: number // < quantity 表示 T+1 冻结
   cost_price: number
   current_price: number
   market_value: number
   profit: number
   profit_rate: number
+}
+
+export interface PositionsData {
+  items: PositionItem[]
+}
+
+export type OrderStatus = 'PENDING' | 'FILLED' | 'REJECTED' | 'CANCELLED'
+export type OrderDirection = 'BUY' | 'SELL'
+
+export interface OrderItem {
+  order_id: string
+  code: string
+  direction: OrderDirection
+  order_type: string
+  price: number
+  quantity: number
+  filled_qty: number
+  avg_fill_price: number
+  status: OrderStatus
+  reason: string
+  source: string
+  created_at: string // YYYY-MM-DD
+}
+
+export interface OrdersData {
+  items: OrderItem[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface TradeItem {
+  trade_id: string
+  order_id: string
+  code: string
+  direction: OrderDirection
+  price: number
+  quantity: number
+  amount: number
+  commission: number
+  tax: number
+  net_amount: number
+  trade_date: string // YYYY-MM-DD
+}
+
+export interface TradesData {
+  items: TradeItem[]
+  total: number
+  page: number
+  page_size: number
 }
 
 // 策略信号（列表项：含股票代码/名称）

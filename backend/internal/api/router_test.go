@@ -11,11 +11,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
+	"quant-system/backend/internal/config"
 	"quant-system/backend/internal/model"
+	"quant-system/backend/internal/service"
 )
 
 var testDB *gorm.DB
@@ -54,7 +55,15 @@ func setupTestDB(t *testing.T) *gorm.DB {
 // newTestRouter 组装被测路由（集成测试入口）
 func newTestRouter(t *testing.T) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	return SetupRouter(setupTestDB(t), zap.NewNop())
+	cfg := config.AccountConfig{
+		InitialCash:    100000,
+		CommissionRate: 0.00025,
+		MinCommission:  5.0,
+		StampTaxRate:   0.0005,
+		Slippage:       0.001,
+	}
+	db := setupTestDB(t)
+	return SetupRouter(db, service.NewTradingService(db, cfg), service.NewNavService(db, cfg), cfg.InitialCash)
 }
 
 // seedTestData 确定性种子数据（手算断言用；AutoMigrate 无唯一约束兜底，仅 setup 时调用一次）

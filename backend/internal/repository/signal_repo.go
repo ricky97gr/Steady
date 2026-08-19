@@ -34,6 +34,19 @@ func (r *SignalRepository) GetStrategies() ([]model.Strategy, error) {
 	return items, err
 }
 
+// GetStrategy 按名称查询策略（ExecuteDay 读取 top_n / max_position_pct），不存在返回 (nil, nil)
+func (r *SignalRepository) GetStrategy(name string) (*model.Strategy, error) {
+	var s model.Strategy
+	err := r.db.Where("name = ?", name).First(&s).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
 // GetLatestSignalDate 策略最近一次信号日期；无信号返回 (nil, nil)
 // 注意：MAX 在空表上返回 NULL，需 Scan 进 sql.NullTime（time.Time 无法接收 NULL）
 func (r *SignalRepository) GetLatestSignalDate(strategy string) (*time.Time, error) {

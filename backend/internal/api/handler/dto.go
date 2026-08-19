@@ -56,6 +56,72 @@ type stockDetailDTO struct {
 	Valuation        *valuationDTO `json:"valuation"`
 }
 
+// accountDTO 模拟账户卡（Sprint 5）
+type accountDTO struct {
+	AccountID   uint64  `json:"account_id"`
+	Name        string  `json:"name"`
+	Cash        float64 `json:"cash"`
+	MarketValue float64 `json:"market_value"`
+	TotalAsset  float64 `json:"total_asset"`
+	Profit      float64 `json:"profit"`
+	ProfitRate  float64 `json:"profit_rate"`
+	MaxDrawdown float64 `json:"max_drawdown"`
+	InitialCash float64 `json:"initial_cash"`
+}
+
+// navItemDTO 净值快照单条
+type navItemDTO struct {
+	TradeDate   string  `json:"trade_date"`
+	TotalAsset  float64 `json:"total_asset"`
+	Nav         float64 `json:"nav"`
+	DailyReturn float64 `json:"daily_return"`
+	Drawdown    float64 `json:"drawdown"`
+}
+
+// positionDTO 持仓单条
+type positionDTO struct {
+	Code         string  `json:"code"`
+	Name         string  `json:"name"`
+	Quantity     int     `json:"quantity"`
+	AvailableQty int     `json:"available_qty"` // < quantity 表示 T+1 冻结
+	CostPrice    float64 `json:"cost_price"`
+	CurrentPrice float64 `json:"current_price"`
+	MarketValue  float64 `json:"market_value"`
+	Profit       float64 `json:"profit"`
+	ProfitRate   float64 `json:"profit_rate"`
+}
+
+// orderDTO 委托单条
+type orderDTO struct {
+	OrderID      string  `json:"order_id"`
+	Code         string  `json:"code"`
+	Direction    string  `json:"direction"`
+	OrderType    string  `json:"order_type"`
+	Price        float64 `json:"price"`
+	Quantity     int     `json:"quantity"`
+	FilledQty    int     `json:"filled_qty"`
+	AvgFillPrice float64 `json:"avg_fill_price"`
+	Status       string  `json:"status"`
+	Reason       string  `json:"reason"`
+	Source       string  `json:"source"`
+	CreatedAt    string  `json:"created_at"`
+}
+
+// tradeDTO 成交单条
+type tradeDTO struct {
+	TradeID    string  `json:"trade_id"`
+	OrderID    string  `json:"order_id"`
+	Code       string  `json:"code"`
+	Direction  string  `json:"direction"`
+	Price      float64 `json:"price"`
+	Quantity   int     `json:"quantity"`
+	Amount     float64 `json:"amount"`
+	Commission float64 `json:"commission"`
+	Tax        float64 `json:"tax"`
+	NetAmount  float64 `json:"net_amount"`
+	TradeDate  string  `json:"trade_date"`
+}
+
 // formatDate 日期格式化为 YYYY-MM-DD，零值返回空串
 func formatDate(t time.Time) string {
 	if t.IsZero() {
