@@ -191,6 +191,12 @@ export default function SettingsPage() {
                   onChange={(v) => feishu && setFeishu({ ...feishu, enabled: v })}
                 />
               </Form.Item>
+              <Form.Item label="通知时 @所有人" extra="开启后所有通知卡片都会 @ 群内所有人（个人通知群推荐开启）">
+                <Switch
+                  checked={feishu?.at_all ?? false}
+                  onChange={(v) => feishu && setFeishu({ ...feishu, at_all: v })}
+                />
+              </Form.Item>
               <Form.Item label="Webhook URL" extra="飞书群机器人 webhook，形如 https://open.feishu.cn/open-apis/bot/v2/hook/xxx">
                 <Input
                   value={feishu?.webhook_url ?? ''}

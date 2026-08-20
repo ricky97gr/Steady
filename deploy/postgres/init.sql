@@ -369,6 +369,7 @@ INSERT INTO app_config (key, value, value_type, description) VALUES
     ('feishu.timeout',       '10',    'int',    '请求超时秒'),
     ('feishu.max_retries',   '2',     'int',    '失败重试上限'),
     ('feishu.secret',        '',      'secret', '飞书签名校验密钥（机器人开启签名校验后必填）'),
+    ('feishu.at_all',        '0',     'bool',   '通知卡片 @所有人'),
     ('llm.enabled',          '0',     'bool',   '大模型生成预留开关'),
     ('llm.provider',         'openai','string', '大模型提供商'),
     ('llm.model',            '',      'string', '大模型名称'),

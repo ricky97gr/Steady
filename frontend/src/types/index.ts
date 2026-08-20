@@ -296,6 +296,7 @@ export interface FeishuConfig {
   timeout: number
   max_retries: number
   secret: string // 签名校验密钥；留空=不签名
+  at_all: boolean // 通知卡片 @所有人
 }
 
 export interface NotifyConfigData {
