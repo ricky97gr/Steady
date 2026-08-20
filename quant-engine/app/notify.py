@@ -6,7 +6,7 @@
 - 卡片结构：interactive 富文本，标题 + lark_md 摘要 + Dashboard 链接
 
 配置键（app_config）：feishu.enabled / feishu.webhook_url / feishu.dashboard_url /
-feishu.timeout / feishu.max_retries / feishu.secret
+feishu.timeout / feishu.max_retries / feishu.secret / feishu.at_all（通知卡片 @所有人）
 """
 import base64
 import hashlib
@@ -33,6 +33,7 @@ _KEYMAP = {
     "feishu.timeout": "timeout",
     "feishu.max_retries": "max_retries",
     "feishu.secret": "secret",
+    "feishu.at_all": "at_all",
 }
 
 # .env 兜底键
@@ -43,6 +44,7 @@ _ENV_KEYS = {
     "timeout": "FEISHU_REQUEST_TIMEOUT",
     "max_retries": "FEISHU_MAX_RETRIES",
     "secret": "FEISHU_SECRET",
+    "at_all": "FEISHU_AT_ALL",
 }
 
 
@@ -77,6 +79,7 @@ def load_config(db=None) -> dict:
         "timeout": float(vals["timeout"] or 10),
         "max_retries": int(vals["max_retries"] or 2),
         "secret": (vals["secret"] or "").strip(),
+        "at_all": str(vals["at_all"]).strip().lower() in ("1", "true", "yes", "on"),
     }
 
 
@@ -90,6 +93,7 @@ class FeishuNotifier:
         self.timeout = float(cfg.get("timeout") or 10)
         self.max_retries = int(cfg.get("max_retries") or 2)
         self.secret = str(cfg.get("secret") or "").strip()
+        self.at_all = bool(cfg.get("at_all"))
 
     def url(self, path: str = "/") -> str:
         return self.dashboard + (path if path.startswith("/") else "/" + path)
@@ -132,6 +136,8 @@ class FeishuNotifier:
 
     def _build_card(self, title: str, content_md: str, template: str,
                     footer: str | None) -> dict:
+        if self.at_all:  # @所有人：lark_md 内容前置 @ 标签，触发全员提及通知
+            content_md = '<at id="all"></at>\n\n' + content_md
         elements = [
             {"tag": "div", "text": {"tag": "lark_md", "content": content_md}},
             {"tag": "hr"},

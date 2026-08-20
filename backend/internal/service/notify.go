@@ -46,7 +46,8 @@ type FeishuConfigDTO struct {
 	DashboardURL string `json:"dashboard_url"`
 	Timeout      int    `json:"timeout"`
 	MaxRetries   int    `json:"max_retries"`
-	Secret       string `json:"secret"` // 签名校验密钥；留空=不签名
+	Secret       string `json:"secret"`  // 签名校验密钥；留空=不签名
+	AtAll        bool   `json:"at_all"`  // 通知卡片 @所有人
 }
 
 // ---------- 通知事件配置 ----------
@@ -127,6 +128,7 @@ func (s *NotifyService) GetFeishuConfig() (FeishuConfigDTO, error) {
 		Timeout:      atoiDef(vals["feishu.timeout"], 10),
 		MaxRetries:   atoiDef(vals["feishu.max_retries"], 2),
 		Secret:       vals["feishu.secret"],
+		AtAll:        vals["feishu.at_all"] == "1" || vals["feishu.at_all"] == "true",
 	}, nil
 }
 
@@ -138,6 +140,7 @@ func (s *NotifyService) UpdateFeishuConfig(d FeishuConfigDTO) error {
 		{Key: "feishu.timeout", Value: strconv.Itoa(d.Timeout), ValueType: "int"},
 		{Key: "feishu.max_retries", Value: strconv.Itoa(d.MaxRetries), ValueType: "int"},
 		{Key: "feishu.secret", Value: d.Secret, ValueType: "secret"},
+		{Key: "feishu.at_all", Value: strconv.FormatBool(d.AtAll), ValueType: "bool"},
 	}
 	return s.db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "key"}},
@@ -164,6 +167,9 @@ func (s *NotifyService) SendCard(title, content, template, footer string) error 
 	}
 	if !cfg.Enabled || cfg.WebhookURL == "" {
 		return errors.New("飞书通知未启用或未配置 webhook，请先在设置页配置")
+	}
+	if cfg.AtAll { // @所有人：lark_md 内容前置 @ 标签，触发全员提及通知
+		content = `<at id="all"></at>` + "\n\n" + content
 	}
 	payload := buildCardPayload(title, content, template, footer)
 	if cfg.Secret != "" { // 开启签名校验：请求体携带 timestamp + sign
