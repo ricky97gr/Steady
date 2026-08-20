@@ -126,9 +126,21 @@ def job_sync_valuation():
     logger.info("估值同步完成：成功 %s，失败 %s", ok, fail)
 
 
+def job_sync_hotspot():
+    """08:45 市场热点快照（隔夜外盘/板块涨幅与资金流/人气榜，供早盘简报）。
+    周末跳过（日历 09:05 才同步，这里用周几启发式；工作日节假日多采无害）。"""
+    if date.today().weekday() >= 5:
+        logger.info("周末，跳过市场热点采集")
+        return
+    from app.collectors.hotspot import HotspotCollector
+
+    HotspotCollector(get_session()).run(spot_date=date.today())
+
+
 if __name__ == "__main__":
     scheduler = BlockingScheduler()
 
+    scheduler.add_job(job_sync_hotspot, "cron", hour=8, minute=45)
     scheduler.add_job(job_sync_stock_list, "cron", hour=9, minute=0)
     scheduler.add_job(job_sync_calendar, "cron", hour=9, minute=5)
     scheduler.add_job(job_sync_index, "cron", hour=16, minute=15)

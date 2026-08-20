@@ -319,6 +319,25 @@ CREATE TABLE IF NOT EXISTS backtest_result (
 );
 
 -- ------------------------------------------------------------
+-- 14.5 市场热点快照（早盘简报数据源，Issue #4）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS market_hotspot (
+    spot_date DATE        PRIMARY KEY,
+    sections  JSONB       NOT NULL,   -- {indices, sectors_gain, sectors_flow, hot_stocks}
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ------------------------------------------------------------
+-- 14.6 早盘简报正文（Issue #4：quant-engine 09:10 组装落库；
+-- sections 结构见 quant-engine/app/morning_brief.py assemble_brief）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS morning_brief (
+    brief_date DATE        PRIMARY KEY,
+    sections   JSONB       NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ------------------------------------------------------------
 -- 通知 / 监控 / 应用配置（飞书机器人 + 大模型预留）
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS task_run (
@@ -357,6 +376,8 @@ INSERT INTO notify_config (event_key, name, enabled, schedule_type, weekdays, se
     ('auto_trade',   '模拟交易', TRUE, 'trading_day', NULL, '19:35', 'blue'),
     ('nav',          '净值快照', TRUE, 'trading_day', NULL, '21:05', 'blue'),
     ('daily_report', '每日日报', TRUE, 'trading_day', NULL, '21:00', 'blue'),
+    ('data_quality', '数据健康检查', TRUE, 'trading_day', NULL, '18:35', 'blue'),
+    ('morning_brief', '早盘简报', TRUE, 'trading_day', NULL, '09:15', 'blue'),
     ('backtest',     '回测完成', TRUE, 'event',       NULL, NULL,    'green'),
     ('task_alert',   '任务告警', TRUE, 'event',       NULL, NULL,    'red')
 ON CONFLICT (event_key) DO NOTHING;

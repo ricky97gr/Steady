@@ -39,6 +39,14 @@ DAILY_SYNC_INTERVAL = _int("COLLECTOR_DAILY_INTERVAL", 1)
 # （曾卡死同步），这里统一兜底；超时抛异常走降级/重试，而非无限等待。
 REQUEST_TIMEOUT = _int("COLLECTOR_REQUEST_TIMEOUT", 15)
 
+# 热点采集（早盘简报数据源，Issue #4）：每日早晨采集一次
+HOTSPOT_TOP_N = _int("COLLECTOR_HOTSPOT_TOP_N", 10)          # 板块/人气榜取 TOP N
+HOTSPOT_INDICES = _str("COLLECTOR_HOTSPOT_INDICES", ".DJI,.IXIC,.INX")  # 隔夜外盘代码
+
 
 def index_code_list() -> list[str]:
     return [c.strip() for c in INDEX_CODES.split(",") if c.strip()]
+
+
+def hotspot_index_list() -> list[str]:
+    return [c.strip() for c in HOTSPOT_INDICES.split(",") if c.strip()]

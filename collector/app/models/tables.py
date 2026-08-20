@@ -2,6 +2,7 @@
 from datetime import date, datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     Column,
@@ -97,3 +98,21 @@ class TradeCalendar(Base):
     cal_date = Column(Date, primary_key=True)
     is_open = Column(Boolean, nullable=False)
     exchange = Column(String(10), default="SSE")
+
+
+class MarketHotspot(Base):
+    """市场热点快照（早盘简报数据源，Issue #4）：每日早晨采集一次。
+
+    sections JSONB 结构：
+    { indices: [{name, code, close, change_pct}, ...],        # 隔夜外盘 + A股指数
+      sectors_gain: [{name, change_pct, leader}, ...],        # 板块涨幅榜 TOP_N
+      sectors_flow: [{name, net_inflow}, ...],                # 板块资金净流入 TOP_N
+      hot_stocks: [{rank, code, name, change_pct,
+                    board_days?, industry?}, ...] }           # 个股人气榜 TOP_N（涨停池兜底带连板/行业）
+    """
+
+    __tablename__ = "market_hotspot"
+
+    spot_date = Column(Date, primary_key=True)
+    sections = Column(JSON, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
