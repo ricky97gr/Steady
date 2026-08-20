@@ -165,12 +165,48 @@ def job_consume_backtests():
         db.close()
 
 
+def job_data_quality():
+    """18:30 数据健康检查：7 项体检结果写 task_run 台账（notify_scheduler 18:35 推送）。
+    执行成功即记 success（发现问题是产出而非失败）；job 崩溃才记 failed。"""
+
+    db = get_session()
+    td = None
+    try:
+        td = latest_trade_date(db)
+        if td is None:
+            logger.warning("无行情数据，跳过数据健康检查")
+            record_task(db, "data_quality", date.today(), "skipped", "无行情数据")
+            return
+        from app.data_quality import check_data_quality
+
+        detail = check_data_quality(db, td)
+        record_task(db, "data_quality", td, "success",
+                    detail["message"], detail=detail)
+        logger.info("数据健康检查完成 %s：%s", td, detail["message"])
+    except Exception:
+        logger.exception("数据健康检查任务失败")
+        db.rollback()
+        record_task(db, "data_quality", td or date.today(), "failed", "数据健康检查异常")
+    finally:
+        db.close()
+
+
+def job_morning_brief():
+    """09:10 早盘简报（热点采集 + 昨日回顾 + 今日计划，Issue #4）。
+    非交易日/无行情 skip；组装逻辑见 app/morning_brief.py。"""
+    from app.morning_brief import job_morning_brief as _job
+
+    _job()
+
+
 if __name__ == "__main__":
     scheduler = BlockingScheduler()
 
+    scheduler.add_job(job_morning_brief, "cron", hour=9, minute=10)
     scheduler.add_job(job_calc_factors, "cron", hour=19, minute=0)
     scheduler.add_job(job_generate_signals, "cron", hour=19, minute=30)
     scheduler.add_job(job_consume_backtests, "interval", minutes=5)
+    scheduler.add_job(job_data_quality, "cron", hour=18, minute=30)
     scheduler.add_job(notify_tick, "interval", minutes=1)
 
     logger.info("quant-engine 调度器启动，等待定时任务...")

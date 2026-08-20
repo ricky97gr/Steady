@@ -68,6 +68,8 @@ const TASK_LABELS: Record<string, string> = {
   auto_trade: '模拟交易',
   nav_snapshot: '净值快照',
   daily_report: '每日日报',
+  data_quality: '数据健康检查',
+  morning_brief: '早盘简报',
 }
 
 const taskLabel = (name: string) => TASK_LABELS[name] ?? name

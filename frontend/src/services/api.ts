@@ -12,6 +12,7 @@ import type {
   FinancialListData,
   IndexNavData,
   KLineData,
+  MorningBriefData,
   NotifyConfigData,
   NotifyEvent,
   OrdersData,
@@ -199,6 +200,14 @@ export async function manualExecuteDay(): Promise<ExecuteDayResult> {
   return resp.data.data
 }
 
+// 早盘简报（Issue #4）：date 缺省返回最近一份
+export async function getMorningBrief(date?: string): Promise<MorningBriefData> {
+  const resp = await http.get<ApiResponse<MorningBriefData>>('/morning-brief', {
+    params: date ? { date } : undefined,
+  })
+  return resp.data.data
+}
+
 export const api = {
   getStocks,
   getStockDetail,
@@ -222,4 +231,5 @@ export const api = {
   sendNotifyTest,
   getTaskRuns,
   manualExecuteDay,
+  getMorningBrief,
 }
