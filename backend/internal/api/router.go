@@ -13,7 +13,8 @@ import (
 func SetupRouter(db *gorm.DB, tradingSvc *service.TradingService,
 	navSvc *service.NavService, initialCash float64,
 	taskRunSvc *service.TaskRunService, notifySvc *service.NotifyService,
-	executeSvc *service.ExecuteService) *gin.Engine {
+	executeSvc *service.ExecuteService,
+	briefSvc *service.MorningBriefService) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 
@@ -66,6 +67,9 @@ func SetupRouter(db *gorm.DB, tradingSvc *service.TradingService,
 		v1.POST("/notify/test", handler.SendTestCard(notifySvc))
 		v1.GET("/tasks/runs", handler.GetTaskRuns(taskRunSvc))
 		v1.POST("/trading/execute-day", handler.ManualExecuteDay(executeSvc))
+
+		// 早盘简报（Issue #4）
+		v1.GET("/morning-brief", handler.GetMorningBrief(briefSvc))
 	}
 
 	return r

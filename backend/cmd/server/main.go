@@ -46,9 +46,9 @@ func main() {
 	}
 	log.Info("数据库连接成功", zap.String("host", cfg.Database.Host))
 
-	// 3.5 自动迁移新增表（task_run / notify_config / app_config，与 init.sql 同构幂等）
+	// 3.5 自动迁移新增表（task_run / notify_config / app_config / morning_brief，与 init.sql 同构幂等）
 	if err := db.AutoMigrate(
-		&model.TaskRun{}, &model.NotifyConfig{}, &model.AppConfig{}); err != nil {
+		&model.TaskRun{}, &model.NotifyConfig{}, &model.AppConfig{}, &model.MorningBrief{}); err != nil {
 		log.Fatal("自动迁移失败", zap.Error(err))
 	}
 
@@ -58,6 +58,7 @@ func main() {
 	taskRunSvc := service.NewTaskRunService(db)
 	notifySvc := service.NewNotifyService(db)
 	executeSvc := service.NewExecuteService(db, tradingSvc, navSvc, taskRunSvc, notifySvc)
+	briefSvc := service.NewMorningBriefService(db)
 
 	sched := service.NewScheduler(log)
 	accountRepo := repository.NewAccountRepository(db)
@@ -72,7 +73,7 @@ func main() {
 
 	// 5. 注册路由并启动服务
 	router := api.SetupRouter(db, tradingSvc, navSvc, cfg.Account.InitialCash,
-		taskRunSvc, notifySvc, executeSvc)
+		taskRunSvc, notifySvc, executeSvc, briefSvc)
 	srv := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 		Handler:      router,
