@@ -63,7 +63,12 @@ func newTestRouter(t *testing.T) *gin.Engine {
 		Slippage:       0.001,
 	}
 	db := setupTestDB(t)
-	return SetupRouter(db, service.NewTradingService(db, cfg), service.NewNavService(db, cfg), cfg.InitialCash)
+	tradingSvc := service.NewTradingService(db, cfg)
+	navSvc := service.NewNavService(db, cfg)
+	taskRunSvc := service.NewTaskRunService(db)
+	notifySvc := service.NewNotifyService(db)
+	executeSvc := service.NewExecuteService(db, tradingSvc, navSvc, taskRunSvc, notifySvc)
+	return SetupRouter(db, tradingSvc, navSvc, cfg.InitialCash, taskRunSvc, notifySvc, executeSvc)
 }
 
 // seedTestData 确定性种子数据（手算断言用；AutoMigrate 无唯一约束兜底，仅 setup 时调用一次）

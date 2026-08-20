@@ -35,6 +35,10 @@ DAILY_FALLBACK_DAYS = _int("COLLECTOR_DAILY_FALLBACK_DAYS", 30)
 # 每日增量同步的股票间间隔（秒，回填用 RATE_LIMIT_SECONDS）
 DAILY_SYNC_INTERVAL = _int("COLLECTOR_DAILY_INTERVAL", 1)
 
+# 数据源请求超时（秒）：AkShare 底层 requests 无 timeout，遇到半开连接会永久挂起
+# （曾卡死同步），这里统一兜底；超时抛异常走降级/重试，而非无限等待。
+REQUEST_TIMEOUT = _int("COLLECTOR_REQUEST_TIMEOUT", 15)
+
 
 def index_code_list() -> list[str]:
     return [c.strip() for c in INDEX_CODES.split(",") if c.strip()]

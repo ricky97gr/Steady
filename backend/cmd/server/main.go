@@ -13,6 +13,7 @@ import (
 
 	"quant-system/backend/internal/api"
 	"quant-system/backend/internal/config"
+	"quant-system/backend/internal/model"
 	"quant-system/backend/internal/repository"
 	"quant-system/backend/internal/service"
 	"quant-system/backend/pkg/logger"
@@ -45,23 +46,33 @@ func main() {
 	}
 	log.Info("数据库连接成功", zap.String("host", cfg.Database.Host))
 
-	// 4. 交易服务 + 调度器（Sprint 5：19:35 自动下单 / 21:05 净值快照）
+	// 3.5 自动迁移新增表（task_run / notify_config / app_config，与 init.sql 同构幂等）
+	if err := db.AutoMigrate(
+		&model.TaskRun{}, &model.NotifyConfig{}, &model.AppConfig{}); err != nil {
+		log.Fatal("自动迁移失败", zap.Error(err))
+	}
+
+	// 4. 交易/通知/执行服务 + 调度器（Sprint 5：19:35 自动下单 / 21:05 净值快照）
 	tradingSvc := service.NewTradingService(db, cfg.Account)
 	navSvc := service.NewNavService(db, cfg.Account)
+	taskRunSvc := service.NewTaskRunService(db)
+	notifySvc := service.NewNotifyService(db)
+	executeSvc := service.NewExecuteService(db, tradingSvc, navSvc, taskRunSvc, notifySvc)
 
 	sched := service.NewScheduler(log)
 	accountRepo := repository.NewAccountRepository(db)
 	dailyRepo := repository.NewDailyRepository(db)
 	sched.Register("auto-trade", 19, 35, func() error {
-		return runAutoTrade(tradingSvc, accountRepo, dailyRepo, log)
+		return runAutoTrade(log, taskRunSvc, tradingSvc, accountRepo, dailyRepo)
 	})
 	sched.Register("nav-snapshot", 21, 5, func() error {
-		return runNavSnapshot(navSvc, accountRepo, dailyRepo, log)
+		return runNavSnapshot(log, taskRunSvc, db, navSvc, accountRepo, dailyRepo)
 	})
 	go sched.Start()
 
 	// 5. 注册路由并启动服务
-	router := api.SetupRouter(db, tradingSvc, navSvc, cfg.Account.InitialCash)
+	router := api.SetupRouter(db, tradingSvc, navSvc, cfg.Account.InitialCash,
+		taskRunSvc, notifySvc, executeSvc)
 	srv := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 		Handler:      router,
@@ -74,9 +85,18 @@ func main() {
 	}
 }
 
+// recordTask 写任务账本（best-effort，失败仅记日志，不影响业务）
+func recordTask(log *zap.Logger, svc *service.TaskRunService, name string, td time.Time,
+	status, msg string, detail interface{}) {
+	if err := svc.Record(name, td, status, msg, detail); err != nil {
+		log.Warn("记录任务执行状态失败", zap.String("task", name), zap.Error(err))
+	}
+}
+
 // runAutoTrade 19:35 自动下单：以最近交易日为基准，幂等闸在服务内部（净值已存在 → 跳过）
-func runAutoTrade(tradingSvc *service.TradingService, accountRepo *repository.AccountRepository,
-	dailyRepo *repository.DailyRepository, log *zap.Logger) error {
+func runAutoTrade(log *zap.Logger, taskRunSvc *service.TaskRunService,
+	tradingSvc *service.TradingService, accountRepo *repository.AccountRepository,
+	dailyRepo *repository.DailyRepository) error {
 
 	acc, err := accountRepo.GetPrimary()
 	if err != nil {
@@ -92,22 +112,35 @@ func runAutoTrade(tradingSvc *service.TradingService, accountRepo *repository.Ac
 	}
 	res, err := tradingSvc.ExecuteDay(acc.ID, *latest)
 	if err != nil {
+		recordTask(log, taskRunSvc, "auto_trade", *latest, "failed", "自动交易异常",
+			map[string]interface{}{"trade_date": latest.Format("2006-01-02")})
 		return err
 	}
 	if res.Skipped {
+		recordTask(log, taskRunSvc, "auto_trade", *latest, "success", "当日已执行，幂等跳过",
+			map[string]interface{}{"trade_date": latest.Format("2006-01-02"), "skipped": true})
 		log.Info("当日已执行，跳过自动下单", zap.String("trade_date", latest.Format("2006-01-02")))
-	} else {
-		log.Info("自动下单完成",
-			zap.String("trade_date", latest.Format("2006-01-02")),
-			zap.Int("buy", res.BuyCount), zap.Int("sell", res.SellCount),
-			zap.Int("manual", res.Manual), zap.Int("rejected", res.Rejected))
+		return nil
 	}
+	recordTask(log, taskRunSvc, "auto_trade", *latest, "success",
+		fmt.Sprintf("买入 %d / 卖出 %d / 手动 %d / 拒绝 %d",
+			res.BuyCount, res.SellCount, res.Manual, res.Rejected),
+		map[string]interface{}{
+			"trade_date": latest.Format("2006-01-02"), "skipped": false,
+			"buy_count": res.BuyCount, "sell_count": res.SellCount,
+			"manual": res.Manual, "rejected": res.Rejected,
+		})
+	log.Info("自动下单完成",
+		zap.String("trade_date", latest.Format("2006-01-02")),
+		zap.Int("buy", res.BuyCount), zap.Int("sell", res.SellCount),
+		zap.Int("manual", res.Manual), zap.Int("rejected", res.Rejected))
 	return nil
 }
 
 // runNavSnapshot 21:05 净值快照
-func runNavSnapshot(navSvc *service.NavService, accountRepo *repository.AccountRepository,
-	dailyRepo *repository.DailyRepository, log *zap.Logger) error {
+func runNavSnapshot(log *zap.Logger, taskRunSvc *service.TaskRunService, db *gorm.DB,
+	navSvc *service.NavService, accountRepo *repository.AccountRepository,
+	dailyRepo *repository.DailyRepository) error {
 
 	acc, err := accountRepo.GetPrimary()
 	if err != nil {
@@ -123,7 +156,26 @@ func runNavSnapshot(navSvc *service.NavService, accountRepo *repository.AccountR
 	}
 	res, err := navSvc.SnapshotDay(acc.ID, *latest)
 	if err != nil {
+		recordTask(log, taskRunSvc, "nav_snapshot", *latest, "failed", "净值快照异常",
+			map[string]interface{}{"trade_date": latest.Format("2006-01-02")})
 		return err
+	}
+	// 快照详情（日收益/回撤/总资产）从 account_nav 读
+	var navRow model.AccountNav
+	if err := db.Where("account_id = ? AND trade_date = ?", acc.ID, *latest).
+		Order("id desc").First(&navRow).Error; err == nil {
+		recordTask(log, taskRunSvc, "nav_snapshot", *latest, "success",
+			fmt.Sprintf("净值 %v", navRow.Nav),
+			map[string]interface{}{
+				"trade_date": latest.Format("2006-01-02"), "skipped": res.Skipped,
+				"nav": navRow.Nav, "daily_return": navRow.DailyReturn,
+				"drawdown": navRow.Drawdown, "total_asset": navRow.TotalAsset,
+			})
+	} else {
+		recordTask(log, taskRunSvc, "nav_snapshot", *latest, "success",
+			fmt.Sprintf("净值 %v", res.Nav),
+			map[string]interface{}{"trade_date": latest.Format("2006-01-02"),
+				"skipped": res.Skipped, "nav": res.Nav})
 	}
 	if res.Skipped {
 		log.Info("当日净值已存在，跳过快照", zap.String("trade_date", latest.Format("2006-01-02")))

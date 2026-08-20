@@ -7,9 +7,13 @@ import type {
   ApiResponse,
   BacktestJobItem,
   BacktestsData,
+  ExecuteDayResult,
+  FeishuConfig,
   FinancialListData,
   IndexNavData,
   KLineData,
+  NotifyConfigData,
+  NotifyEvent,
   OrdersData,
   PositionsData,
   SignalHistoryData,
@@ -19,6 +23,7 @@ import type {
   StockDetail,
   StockListData,
   StockListQuery,
+  TaskRunsData,
   TradesData,
 } from '../types'
 
@@ -153,6 +158,47 @@ export async function submitBacktest(req: {
   return resp.data.data
 }
 
+// ---- 通知与任务监控（Issue #5）----
+
+export async function getNotifyConfig(): Promise<NotifyConfigData> {
+  const resp = await http.get<ApiResponse<NotifyConfigData>>('/notify/config')
+  return resp.data.data
+}
+
+export async function updateNotifyEvent(
+  eventKey: string,
+  req: NotifyEvent,
+): Promise<{ event_key: string; updated: boolean }> {
+  const resp = await http.put<ApiResponse<{ event_key: string; updated: boolean }>>(
+    `/notify/config/${eventKey}`,
+    req,
+  )
+  return resp.data.data
+}
+
+export async function updateFeishuConfig(
+  req: FeishuConfig,
+): Promise<{ updated: boolean }> {
+  const resp = await http.put<ApiResponse<{ updated: boolean }>>('/notify/config/feishu', req)
+  return resp.data.data
+}
+
+export async function sendNotifyTest(): Promise<{ sent: boolean }> {
+  const resp = await http.post<ApiResponse<{ sent: boolean }>>('/notify/test')
+  return resp.data.data
+}
+
+export async function getTaskRuns(limit = 20): Promise<TaskRunsData> {
+  const resp = await http.get<ApiResponse<TaskRunsData>>('/tasks/runs', { params: { limit } })
+  return resp.data.data
+}
+
+// 手动触发 ExecuteDay + SnapshotDay（Trade 页兜底按钮）
+export async function manualExecuteDay(): Promise<ExecuteDayResult> {
+  const resp = await http.post<ApiResponse<ExecuteDayResult>>('/trading/execute-day')
+  return resp.data.data
+}
+
 export const api = {
   getStocks,
   getStockDetail,
@@ -170,4 +216,10 @@ export const api = {
   getBacktests,
   getBacktest,
   submitBacktest,
+  getNotifyConfig,
+  updateNotifyEvent,
+  updateFeishuConfig,
+  sendNotifyTest,
+  getTaskRuns,
+  manualExecuteDay,
 }

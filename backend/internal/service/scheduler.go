@@ -33,12 +33,20 @@ func NewScheduler(log *zap.Logger) *Scheduler {
 	return &Scheduler{loc: loc, log: log}
 }
 
-// Register 注册每日任务；lastRun 初始化为今天 → 重启不补跑
+// Register 注册每日任务。
+// 重启当天：若注册时当天触发时刻已过 → 当天不补跑（lastRun=今天，次日恢复）；
+// 若注册时尚未到触发时刻 → 当天照常执行（lastRun=昨天，避免整日跳过）。
 func (s *Scheduler) Register(name string, hour, minute int, fn func() error) {
 	now := time.Now().In(s.loc)
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.loc)
+	lastRun := today
+	triggerToday := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, s.loc)
+	if now.Before(triggerToday) {
+		// 当天触发时刻尚未到 → 当天照常执行（lastRun 置为昨天，避免整日跳过）
+		lastRun = today.AddDate(0, 0, -1)
+	}
 	s.jobs = append(s.jobs, &schedJob{
-		name: name, hour: hour, minute: minute, lastRun: today, run: fn,
+		name: name, hour: hour, minute: minute, lastRun: lastRun, run: fn,
 	})
 }
 

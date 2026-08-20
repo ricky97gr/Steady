@@ -81,6 +81,42 @@ def claim_job(db) -> BacktestJob | None:
     return row[0]
 
 
+def _push_backtest_card(db, job: BacktestJob, status: str, report: dict | None = None):
+    """回测完成/失败推送飞书（事件型：尊重 notify_config.backtest 开关）"""
+    from app.models.tables import NotifyConfig
+    from app.notify import FeishuNotifier, load_config
+
+    cfg = load_config(db)
+    if not cfg["enabled"]:
+        return
+    ev = db.execute(
+        select(NotifyConfig).where(NotifyConfig.event_key == "backtest")
+    ).scalar()
+    if ev is None or not ev.enabled:
+        return
+    notifier = FeishuNotifier(cfg)
+    if status == "done" and report:
+        p = report.get("portfolio", {})
+        sharpe = p.get("sharpe")
+        content = (
+            f"**区间** {job.start_date} ~ {job.end_date}"
+            f"（{report.get('trading_days')} 个交易日）\n"
+            f"**总收益** {(p.get('total_return') or 0) * 100:+.2f}%\n"
+            f"**年化收益** {(p.get('annualized_return') or 0) * 100:+.2f}%\n"
+            f"**最大回撤** {(p.get('max_drawdown') or 0) * 100:.2f}%\n"
+            f"**夏普比率** {sharpe if sharpe is not None else 'N/A'}\n"
+            f"**成交** {report.get('trades', 0)} 笔 · 持仓 {report.get('positions', 0)} 只"
+        )
+        notifier.send_card("📊 Steady · 回测完成", content, template="green",
+                           footer=f"任务 #{job.id} · 结果已保存")
+    else:
+        content = (f"**任务** #{job.id}\n"
+                   f"**区间** {job.start_date} ~ {job.end_date}\n"
+                   f"**错误** {job.error or '未知错误'}")
+        notifier.send_card("❌ Steady · 回测失败", content, template="red",
+                           footer=f"任务 #{job.id}")
+
+
 def run_and_save(db, job: BacktestJob):
     """执行回测并把结果写入 backtest_result；失败置 failed + error（不 panic）"""
     from app.backtest.engine import BacktestEngine
@@ -115,12 +151,14 @@ def run_and_save(db, job: BacktestJob):
         logger.info("回测任务 %s 完成（%s ~ %s，%s 个交易日，总收益 %+.2%%）",
                     job.id, job.start_date, job.end_date, report.get("trading_days"),
                     (p.get("total_return") or 0) * 100)
+        _push_backtest_card(db, job, "done", report)
     except Exception as exc:
         db.rollback()
         logger.exception("回测任务 %s 失败", job.id)
         db.execute(update(BacktestJob).where(BacktestJob.id == job.id).values(
             status="failed", error=str(exc)[:500], finished_at=datetime.now()))
         db.commit()
+        _push_backtest_card(db, job, "failed")
 
 
 def consume_pending():

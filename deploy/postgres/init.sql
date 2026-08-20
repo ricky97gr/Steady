@@ -317,3 +317,61 @@ CREATE TABLE IF NOT EXISTS backtest_result (
     nav               JSONB,  -- [{"date":"...","nav":1.0,"benchmark":1.0|null},...]
     created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- ------------------------------------------------------------
+-- 通知 / 监控 / 应用配置（飞书机器人 + 大模型预留）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS task_run (
+    id         BIGSERIAL   PRIMARY KEY,
+    task_name  VARCHAR(64) NOT NULL,
+    run_date   DATE        NOT NULL,
+    status     VARCHAR(16) NOT NULL,           -- success / skipped / failed
+    message    TEXT,
+    detail     JSONB,                          -- 结构化明细（后续供大模型消费）
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (task_name, run_date)
+);
+
+CREATE TABLE IF NOT EXISTS notify_config (
+    event_key     TEXT PRIMARY KEY,            -- signal/auto_trade/nav/daily_report/backtest/task_alert
+    name          VARCHAR(50) NOT NULL,
+    enabled       BOOLEAN     NOT NULL DEFAULT TRUE,
+    schedule_type VARCHAR(16) NOT NULL DEFAULT 'trading_day',  -- weekday / trading_day / event
+    weekdays      TEXT,                        -- '1,2,3,4,5'（1=周一..7=周日）；仅 weekday
+    send_at       TIME,                        -- 定时发送时刻；event 型为 NULL
+    template      VARCHAR(16) NOT NULL DEFAULT 'blue',
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS app_config (
+    key          TEXT PRIMARY KEY,
+    value        TEXT,
+    value_type   VARCHAR(16) NOT NULL DEFAULT 'string',  -- bool/int/string/secret
+    description  TEXT,
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 通知事件默认配置（幂等，页面可改）
+INSERT INTO notify_config (event_key, name, enabled, schedule_type, weekdays, send_at, template) VALUES
+    ('signal',       '策略信号', TRUE, 'trading_day', NULL, '19:30', 'green'),
+    ('auto_trade',   '模拟交易', TRUE, 'trading_day', NULL, '19:35', 'blue'),
+    ('nav',          '净值快照', TRUE, 'trading_day', NULL, '21:05', 'blue'),
+    ('daily_report', '每日日报', TRUE, 'trading_day', NULL, '21:00', 'blue'),
+    ('backtest',     '回测完成', TRUE, 'event',       NULL, NULL,    'green'),
+    ('task_alert',   '任务告警', TRUE, 'event',       NULL, NULL,    'red')
+ON CONFLICT (event_key) DO NOTHING;
+
+-- 应用配置默认值（幂等；webhook/api_key 由 .env 或页面写入，禁止进 git）
+INSERT INTO app_config (key, value, value_type, description) VALUES
+    ('feishu.enabled',       '0',     'bool',   '飞书通知总开关'),
+    ('feishu.webhook_url',   '',      'secret', '飞书群机器人 webhook'),
+    ('feishu.dashboard_url', '',      'string', '卡片跳转链接 base（空则 http://localhost）'),
+    ('feishu.timeout',       '10',    'int',    '请求超时秒'),
+    ('feishu.max_retries',   '2',     'int',    '失败重试上限'),
+    ('feishu.secret',        '',      'secret', '飞书签名校验密钥（机器人开启签名校验后必填）'),
+    ('llm.enabled',          '0',     'bool',   '大模型生成预留开关'),
+    ('llm.provider',         'openai','string', '大模型提供商'),
+    ('llm.model',            '',      'string', '大模型名称'),
+    ('llm.api_key',          '',      'secret', '大模型 API Key'),
+    ('llm.base_url',         '',      'string', '大模型 Base URL')
+ON CONFLICT (key) DO NOTHING;

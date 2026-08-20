@@ -274,3 +274,58 @@ export interface SignalHistoryData {
   code: string
   items: SignalHistoryItem[]
 }
+
+// ---- 通知与任务监控（Issue #5）----
+
+export type NotifyScheduleType = 'weekday' | 'trading_day' | 'event'
+
+export interface NotifyEvent {
+  event_key: string
+  name: string
+  enabled: boolean
+  schedule_type: NotifyScheduleType
+  weekdays: string // '1,2,3,4,5'（1=周一..7=周日）
+  send_at: string | null // HH:MM；event 型为 null
+  template: string // 卡片模板色 blue/red/green
+}
+
+export interface FeishuConfig {
+  enabled: boolean
+  webhook_url: string
+  dashboard_url: string
+  timeout: number
+  max_retries: number
+  secret: string // 签名校验密钥；留空=不签名
+}
+
+export interface NotifyConfigData {
+  events: NotifyEvent[]
+  feishu: FeishuConfig
+}
+
+export type TaskRunStatus = 'success' | 'skipped' | 'failed'
+
+export interface TaskRunItem {
+  id: number
+  task_name: string
+  run_date: string // YYYY-MM-DD
+  status: TaskRunStatus
+  message: string
+  detail: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface TaskRunsData {
+  items: TaskRunItem[]
+}
+
+// 手动触发 ExecuteDay 结果
+export interface ExecuteDayResult {
+  trade_date: string
+  skipped: boolean
+  buy_count: number
+  sell_count: number
+  manual: number
+  rejected: number
+  nav: number
+}

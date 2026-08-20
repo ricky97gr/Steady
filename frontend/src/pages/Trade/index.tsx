@@ -1,8 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Col, Empty, Row, Statistic, Table, Tabs, Tag } from 'antd'
+import {
+  Button,
+  Card,
+  Col,
+  Empty,
+  Popconfirm,
+  Row,
+  Space,
+  Statistic,
+  Table,
+  Tabs,
+  Tag,
+  message,
+} from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {
   AccountBookOutlined,
+  PlayCircleOutlined,
   ReloadOutlined,
   RiseOutlined,
   WalletOutlined,
@@ -12,7 +26,14 @@ import type { EChartsOption } from 'echarts'
 
 import StatCard from '../../components/StatCard'
 import { useEChart } from '../../hooks/useEChart'
-import { getAccount, getAccountNav, getOrders, getPositions, getTrades } from '../../services/api'
+import {
+  getAccount,
+  getAccountNav,
+  getOrders,
+  getPositions,
+  getTrades,
+  manualExecuteDay,
+} from '../../services/api'
 import type { AccountData, AccountNavItem, OrderItem, PositionItem, TradeItem } from '../../types'
 import { formatAmount, formatPercent } from '../../utils/format'
 import { tablePagination } from '../../utils/table'
@@ -104,6 +125,28 @@ export default function TradePage() {
   const [trades, setTrades] = useState<TradeItem[]>([])
   const [loading, setLoading] = useState(true)
   const [reloadTick, setReloadTick] = useState(0)
+  const [executing, setExecuting] = useState(false)
+
+  // 手动触发 ExecuteDay + SnapshotDay：兜底"定时 19:35 已过 / 漏跑"的场景
+  const onManualExecute = async () => {
+    setExecuting(true)
+    try {
+      const res = await manualExecuteDay()
+      if (res.skipped) {
+        message.info(`已跳过：无最新行情（交易日 ${res.trade_date}），请先补跑信号`)
+      } else {
+        message.success(
+          `执行完成：买入 ${res.buy_count} / 卖出 ${res.sell_count} / 拒绝 ${res.rejected}，` +
+            `净值 ${res.nav.toFixed(4)}`,
+        )
+      }
+      setReloadTick((t) => t + 1) // 刷新持仓 / 委托 / 净值
+    } catch {
+      // 错误已由 axios 拦截器统一弹出
+    } finally {
+      setExecuting(false)
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -339,14 +382,33 @@ export default function TradePage() {
           <Card
             title="账户净值曲线"
             extra={
-              <Button
-                size="small"
-                icon={<ReloadOutlined />}
-                loading={loading}
-                onClick={() => setReloadTick((t) => t + 1)}
-              >
-                刷新
-              </Button>
+              <Space>
+                <Popconfirm
+                  title="确认手动执行当日交易？"
+                  description="将按最新信号生成委托并撮合，同时写入当日净值快照。定时 19:35 执行过则自动跳过。"
+                  okText="执行"
+                  cancelText="取消"
+                  onConfirm={onManualExecute}
+                >
+                  <Button
+                    size="small"
+                    type="primary"
+                    ghost
+                    icon={<PlayCircleOutlined />}
+                    loading={executing}
+                  >
+                    手动执行当日交易
+                  </Button>
+                </Popconfirm>
+                <Button
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  loading={loading}
+                  onClick={() => setReloadTick((t) => t + 1)}
+                >
+                  刷新
+                </Button>
+              </Space>
             }
             styles={{ body: { padding: '8px 16px 16px' } }}
           >

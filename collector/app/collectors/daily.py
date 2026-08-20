@@ -4,6 +4,7 @@
 新浪成交量单位为股，统一转手（/100）。
 """
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
 import akshare as ak
@@ -12,6 +13,7 @@ import requests
 
 from app.collectors.base import BaseCollector, to_ak_date
 from app.cleaners import clean_daily_rows
+from app.config import REQUEST_TIMEOUT
 from app.db import upsert
 from app.models.tables import DailyPrice
 
@@ -46,25 +48,55 @@ def normalize_sina(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _with_timeout(fn, *args, timeout=None, **kwargs):
+    """在线程内执行 AkShare 请求并施加超时。
+
+    AkShare 底层 requests 未设置 timeout，对端半开连接时会永久挂起
+    （曾因此卡死整个同步）。此包装器兜底：超时抛 TimeoutError，
+    由调用方按"降级/重试"处理，而不是无限等待。
+    """
+    if timeout is None:
+        timeout = REQUEST_TIMEOUT
+    with ThreadPoolExecutor(max_workers=1) as ex:
+        try:
+            return ex.submit(fn, *args, **kwargs).result(timeout=timeout)
+        except TimeoutError:
+            raise TimeoutError(f"请求超时（>{timeout}s）")
+
+
 def fetch_pair(code: str, start: str, end: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """拉取不复权 + 后复权两套行情，返回 (raw, hfq)，列为东财格式"""
+    """拉取不复权 + 后复权两套行情，返回 (raw, hfq)，列为东财格式
+
+    东财失败/超时 → 降级新浪；新浪同样为空/失败 → 抛异常触发 base.run() 重试，
+    避免"返回空"被静默记为成功造成行情缺口无人知晓。
+    """
     try:
-        raw = ak.stock_zh_a_hist(
-            symbol=code, period="daily", start_date=start, end_date=end, adjust=""
+        raw = _with_timeout(
+            ak.stock_zh_a_hist, symbol=code, period="daily",
+            start_date=start, end_date=end, adjust="",
         )
-        hfq = ak.stock_zh_a_hist(
-            symbol=code, period="daily", start_date=start, end_date=end, adjust="hfq"
+        hfq = _with_timeout(
+            ak.stock_zh_a_hist, symbol=code, period="daily",
+            start_date=start, end_date=end, adjust="hfq",
         )
         return raw, hfq
-    except requests.exceptions.RequestException as e:
-        logger.warning("%s 东财接口失败，降级新浪源: %s", code, e)
-        raw = ak.stock_zh_a_daily(
-            symbol=sina_symbol(code), start_date=start, end_date=end, adjust=""
+    except Exception as e:
+        reason = "超时" if isinstance(e, TimeoutError) else str(e)
+        logger.warning("%s 东财接口失败(%s)，降级新浪源", code, reason)
+        raw = _with_timeout(
+            ak.stock_zh_a_daily, symbol=sina_symbol(code),
+            start_date=start, end_date=end, adjust="",
         )
-        hfq = ak.stock_zh_a_daily(
-            symbol=sina_symbol(code), start_date=start, end_date=end, adjust="hfq"
+        hfq = _with_timeout(
+            ak.stock_zh_a_daily, symbol=sina_symbol(code),
+            start_date=start, end_date=end, adjust="hfq",
         )
-        return normalize_sina(raw), normalize_sina(hfq)
+        raw, hfq = normalize_sina(raw), normalize_sina(hfq)
+        if raw is None or raw.empty:
+            # 双源都拿不到数据：判定失败，交给上层重试，不静默记 0 条成功
+            raise RuntimeError(
+                f"{code} 东财与新浪均未返回数据（东财{reason}），判定失败触发重试")
+    return raw, hfq
 
 
 def build_rows(code: str, raw: pd.DataFrame, hfq: pd.DataFrame) -> list[dict]:

@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Time,
     func,
 )
 from sqlalchemy.orm import declarative_base
@@ -189,3 +190,44 @@ class BacktestResult(Base):
     excess_return = Column(Numeric(10, 4))
     nav = Column(JSON)  # JSONB [{"date","nav","benchmark"}]
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class TaskRun(Base):
+    """任务执行记录（监控/对账数据源；backend GORM 侧有同构模型，DDL 以 init.sql 为准）"""
+
+    __tablename__ = "task_run"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    task_name = Column(String(64), nullable=False)
+    run_date = Column(Date, nullable=False)
+    status = Column(String(16), nullable=False)  # success / skipped / failed
+    message = Column(String)
+    detail = Column(JSON)  # 结构化明细（供页面 / 后续大模型消费）
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class NotifyConfig(Base):
+    """通知事件配置（页面可改：开关 / 调度类型 / 周几 / 发送时间）"""
+
+    __tablename__ = "notify_config"
+
+    event_key = Column(String, primary_key=True)
+    name = Column(String(50), nullable=False)
+    enabled = Column(Boolean, nullable=False, default=True)
+    schedule_type = Column(String(16), nullable=False, default="trading_day")  # weekday/trading_day/event
+    weekdays = Column(String)  # '1,2,3,4,5'（1=周一..7=周日）
+    send_at = Column(Time)  # 定时发送时刻；event 型为 NULL
+    template = Column(String(16), nullable=False, default="blue")
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AppConfig(Base):
+    """应用配置键值表（飞书 + 大模型预留，页面可改；值以库为准）"""
+
+    __tablename__ = "app_config"
+
+    key = Column(String, primary_key=True)
+    value = Column(String)
+    value_type = Column(String(16), nullable=False, default="string")  # bool/int/string/secret
+    description = Column(String)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())

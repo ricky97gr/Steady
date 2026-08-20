@@ -59,6 +59,26 @@ def cmd_signals(args) -> bool:
     return True
 
 
+def cmd_notify(args) -> bool:
+    """发送一条飞书测试卡片（验证 webhook / 配置 / 网络连通）"""
+    from app.db import get_session
+    from app.notify import FeishuNotifier, load_config
+
+    db = get_session()
+    cfg = load_config(db)
+    db.close()
+    if not cfg["enabled"]:
+        logger.error("飞书通知未启用（app_config.feishu.enabled 或 FEISHU_NOTIFY_ENABLED）")
+        return False
+    if not cfg["webhook"]:
+        logger.error("未配置 webhook（app_config.feishu.webhook_url 或 FEISHU_WEBHOOK_URL）")
+        return False
+    notifier = FeishuNotifier(cfg)
+    ok = notifier.send_test(wait=True)
+    logger.info("测试卡片%s送达", "已" if ok else "未（见上方错误）")
+    return ok
+
+
 def cmd_backtest(args) -> bool:
     from app.backtest.engine import BacktestEngine
     from app.backtest_service import build_replay_strategy, create_job, run_and_save
@@ -121,6 +141,9 @@ def main():
     p_b.add_argument("--save", action="store_true",
                      help="提交回测任务并写入 backtest_job/backtest_result（默认仅打印报告）")
 
+    p_n = sub.add_parser("notify", help="飞书通知")
+    p_n.add_argument("--test", action="store_true", help="发送一条测试卡片")
+
     args = parser.parse_args()
 
     try:
@@ -130,6 +153,8 @@ def main():
             ok = cmd_signals(args)
         elif args.cmd == "backtest":
             ok = cmd_backtest(args)
+        elif args.cmd == "notify":
+            ok = cmd_notify(args)
         else:
             parser.error(f"未知命令: {args.cmd}")
         sys.exit(0 if ok else 1)
