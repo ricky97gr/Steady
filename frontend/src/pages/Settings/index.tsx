@@ -8,6 +8,7 @@ import {
   Form,
   Input,
   InputNumber,
+  Popconfirm,
   Row,
   Select,
   Space,
@@ -20,7 +21,9 @@ import {
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {
+  ApiOutlined,
   BellOutlined,
+  DatabaseOutlined,
   RobotOutlined,
   SaveOutlined,
   SendOutlined,
@@ -30,11 +33,14 @@ import dayjs from 'dayjs'
 import {
   getNotifyConfig,
   getTaskRuns,
+  getTushareConfig,
   sendNotifyTest,
+  testTushare,
   updateFeishuConfig,
   updateNotifyEvent,
+  updateTushareConfig,
 } from '../../services/api'
-import type { FeishuConfig, NotifyEvent, TaskRunItem } from '../../types'
+import type { FeishuConfig, NotifyEvent, TaskRunItem, TushareConfig } from '../../types'
 import { tablePagination } from '../../utils/table'
 
 // 调度方式：weekday=每周几 / trading_day=交易日 / event=事件触发（由业务直接推送）
@@ -94,18 +100,23 @@ export default function SettingsPage() {
   const [feishu, setFeishu] = useState<FeishuConfig | null>(null)
   const [events, setEvents] = useState<NotifyEvent[]>([])
   const [runs, setRuns] = useState<TaskRunItem[]>([])
+  const [tushare, setTushare] = useState<TushareConfig | null>(null)
+  const [tushareToken, setTushareToken] = useState('')
   const [loading, setLoading] = useState(true)
   const [savingFeishu, setSavingFeishu] = useState(false)
   const [testing, setTesting] = useState(false)
   const [savingKey, setSavingKey] = useState<string | null>(null)
+  const [savingTushare, setSavingTushare] = useState(false)
+  const [testingTushare, setTestingTushare] = useState(false)
 
   const load = () => {
     setLoading(true)
-    Promise.all([getNotifyConfig(), getTaskRuns(50)])
-      .then(([cfg, runsData]) => {
+    Promise.all([getNotifyConfig(), getTaskRuns(50), getTushareConfig()])
+      .then(([cfg, runsData, tushareData]) => {
         setFeishu(cfg.feishu)
         setEvents(cfg.events)
         setRuns(runsData.items)
+        setTushare(tushareData)
       })
       .catch(() => {
         // 错误已由 axios 拦截器统一弹出，保留空态供重试
@@ -143,6 +154,48 @@ export default function SettingsPage() {
       // 拦截器已提示
     } finally {
       setTesting(false)
+    }
+  }
+
+  const onSaveTushare = async () => {
+    const token = tushareToken.trim()
+    if (!token) return // 空输入不提交，避免误清空；清除走 onClearTushare
+    setSavingTushare(true)
+    try {
+      await updateTushareConfig(token)
+      setTushare({ configured: true, token_masked: `****${token.slice(-4)}` })
+      setTushareToken('')
+      message.success('Tushare 配置已保存')
+    } catch {
+      // 拦截器已提示
+    } finally {
+      setSavingTushare(false)
+    }
+  }
+
+  const onClearTushare = async () => {
+    setSavingTushare(true)
+    try {
+      await updateTushareConfig('')
+      setTushare({ configured: false, token_masked: '' })
+      setTushareToken('')
+      message.success('已清除 Tushare token，数据源回到 AkShare')
+    } catch {
+      // 拦截器已提示
+    } finally {
+      setSavingTushare(false)
+    }
+  }
+
+  const onTestTushare = async () => {
+    setTestingTushare(true)
+    try {
+      await testTushare(tushareToken.trim()) // token 为空时测已存 token
+      message.success('Tushare 连接正常')
+    } catch {
+      // 拦截器已提示具体原因（token 无效 / 积分不足等）
+    } finally {
+      setTestingTushare(false)
     }
   }
 
@@ -259,6 +312,73 @@ export default function SettingsPage() {
           </Card>
         </Col>
       </Row>
+
+      <div style={{ height: 16 }} />
+
+      <Card
+        title={<Space><DatabaseOutlined />Tushare 数据源</Space>}
+        extra={
+          <Space>
+            <Button icon={<ApiOutlined />} loading={testingTushare} onClick={onTestTushare}>
+              测试连接
+            </Button>
+            <Button
+              type="primary"
+              icon={<SaveOutlined />}
+              loading={savingTushare}
+              disabled={!tushareToken.trim()}
+              onClick={onSaveTushare}
+            >
+              保存
+            </Button>
+          </Space>
+        }
+      >
+        <Alert
+          type="info"
+          showIcon
+          message="数据主源（行情 / 估值 / 指数 / 日历 / 列表 / 财务）"
+          description="token 仅存于数据库（app_config 表），配置后采集器优先走 Tushare；财务接口需 2000+ 积分，积分不足自动回退 AkShare。未配置时全部走 AkShare 免费接口。"
+          style={{ marginBottom: 16 }}
+        />
+        <Form layout="vertical">
+          <Form.Item
+            label="当前状态"
+            extra={
+              tushare?.configured
+                ? `已配置（掩码 ${tushare.token_masked}），完整 token 不回显`
+                : '未配置，采集走 AkShare'
+            }
+          >
+            <Space>
+              <Tag color={tushare?.configured ? 'green' : 'orange'} style={{ borderRadius: 6 }}>
+                {tushare?.configured ? '已配置' : '未配置'}
+              </Tag>
+              {tushare?.configured && (
+                <Popconfirm
+                  title="确认清除 Tushare token？"
+                  description="清除后数据源回到 AkShare 免费接口。"
+                  onConfirm={onClearTushare}
+                  okText="清除"
+                  okButtonProps={{ danger: true }}
+                >
+                  <Button size="small" type="link" danger loading={savingTushare}>
+                    清除 token
+                  </Button>
+                </Popconfirm>
+              )}
+            </Space>
+          </Form.Item>
+          <Form.Item label="Tushare Pro Token" extra="粘贴新 token 后保存以更新；留空保存无效（清除走上方按钮）">
+            <Input.Password
+              value={tushareToken}
+              onChange={(e) => setTushareToken(e.target.value)}
+              placeholder={tushare?.configured ? '已配置，留空保持当前 token' : '粘贴 Tushare Pro token'}
+              autoComplete="off"
+            />
+          </Form.Item>
+        </Form>
+      </Card>
 
       <div style={{ height: 16 }} />
 

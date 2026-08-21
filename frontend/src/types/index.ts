@@ -304,6 +304,13 @@ export interface NotifyConfigData {
   feishu: FeishuConfig
 }
 
+// ---- 数据源配置（Tushare）----
+
+export interface TushareConfig {
+  configured: boolean // 是否已配置 token
+  token_masked: string // 掩码预览 "****abcd"；未配置为 ""
+}
+
 export type TaskRunStatus = 'success' | 'skipped' | 'failed'
 
 export interface TaskRunItem {
