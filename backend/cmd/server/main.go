@@ -64,15 +64,17 @@ func main() {
 	sched := service.NewScheduler(log)
 	accountRepo := repository.NewAccountRepository(db)
 	dailyRepo := repository.NewDailyRepository(db)
-	sched.Register("auto-trade", 19, 35, func() error {
+	// 三个每日任务均声明补跑语义：重启后若当天触发时刻已过且当日未执行 → 启动时立即补跑。
+	// 注册顺序即补跑顺序（auto-trade → nav-snapshot → consistency-check），保持数据依赖链。
+	sched.RegisterCatchUp("auto-trade", 19, 35, func() error {
 		return runAutoTrade(log, taskRunSvc, tradingSvc, accountRepo, dailyRepo)
-	})
-	sched.Register("nav-snapshot", 21, 5, func() error {
+	}, catchUpDaily(taskRunSvc, dailyRepo, "auto_trade"))
+	sched.RegisterCatchUp("nav-snapshot", 21, 5, func() error {
 		return runNavSnapshot(log, taskRunSvc, db, navSvc, accountRepo, dailyRepo)
-	})
-	sched.Register("consistency-check", 21, 15, func() error {
+	}, catchUpDaily(taskRunSvc, dailyRepo, "nav_snapshot"))
+	sched.RegisterCatchUp("consistency-check", 21, 15, func() error {
 		return runConsistencyCheck(log, taskRunSvc, consistencySvc, dailyRepo)
-	})
+	}, catchUpDaily(taskRunSvc, dailyRepo, "consistency_check"))
 	go sched.Start()
 
 	// 5. 注册路由并启动服务
@@ -95,6 +97,34 @@ func recordTask(log *zap.Logger, svc *service.TaskRunService, name string, td ti
 	status, msg string, detail interface{}) {
 	if err := svc.Record(name, td, status, msg, detail); err != nil {
 		log.Warn("记录任务执行状态失败", zap.String("task", name), zap.Error(err))
+	}
+}
+
+// catchUpDaily 启动补跑判定：仅当日补跑。最近交易日 == 今天（交易日）且当日该任务
+// 无执行记录 → 需补跑；非交易日/周末（最近交易日 < 今天）返回 false，避免对历史
+// 交易日做无谓的幂等重跑（那会盖掉当日原始台账 detail）。与对应 run 函数同源
+// （GetLatestTradeDate）；无行情数据返回 false（run 函数也会跳过）。
+func catchUpDaily(taskRunSvc *service.TaskRunService, dailyRepo *repository.DailyRepository,
+	taskName string) func() (bool, error) {
+	sh := time.FixedZone("CST", 8*3600)
+	return func() (bool, error) {
+		latest, err := dailyRepo.GetLatestTradeDate()
+		if err != nil {
+			return false, err
+		}
+		if latest == nil {
+			return false, nil // 无行情数据 → 对应 run 函数也会跳过，无需补跑
+		}
+		now := time.Now().In(sh)
+		latestLocal := latest.In(sh)
+		if latestLocal.Year() != now.Year() || latestLocal.YearDay() != now.YearDay() {
+			return false, nil // 最近交易日不是今天（周末/节假日）→ 当日无执行期望
+		}
+		done, err := taskRunSvc.HasRun(taskName, *latest)
+		if err != nil {
+			return false, err
+		}
+		return !done, nil
 	}
 }
 
@@ -174,7 +204,7 @@ func runNavSnapshot(log *zap.Logger, taskRunSvc *service.TaskRunService, db *gor
 			map[string]interface{}{
 				"trade_date": latest.Format("2006-01-02"), "skipped": res.Skipped,
 				"nav": navRow.Nav, "daily_return": navRow.DailyReturn,
-				"drawdown": navRow.Drawdown, "total_asset": navRow.TotalAsset,
+			"drawdown": navRow.Drawdown, "total_asset": navRow.TotalAsset,
 			})
 	} else {
 		recordTask(log, taskRunSvc, "nav_snapshot", *latest, "success",

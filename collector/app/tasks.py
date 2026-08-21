@@ -172,6 +172,30 @@ def job_sync_hotspot():
     HotspotCollector(get_session()).run(spot_date=date.today())
 
 
+def job_nightly_backfill():
+    """18:05 每日缺口回填（仅交易日）：日线补未覆盖到起始日的股票；估值补滞后股票。
+
+    断点续传天然幂等（covered_codes 按 min(trade_date) 判定），正常日只补新股/缺口
+    （16:30/16:45 已同步当日行情与估值，正常日 todo 为空，分钟级）；
+    首次全量仍由 python -m app.collectors.backfill 手动触发。
+    交易日门控：TradeCalendar.is_open != 1（含无记录）→ 跳过，避免周末/节假日无谓拉取。
+    """
+    from app.collectors.backfill import BackfillJob
+    from app.config import BACKFILL_START
+    from app.models.tables import TradeCalendar
+
+    db = get_session()
+    is_open = db.execute(
+        select(TradeCalendar.is_open).where(TradeCalendar.cal_date == date.today())
+    ).scalar()
+    if not is_open:
+        logger.info("非交易日或日历缺失，跳过夜间回填")
+        return
+    start_date = date.fromisoformat(BACKFILL_START.replace("-", ""))
+    BackfillJob(db).daily(start_date, date.today())
+    BackfillJob(db).valuation()
+
+
 if __name__ == "__main__":
     scheduler = BlockingScheduler()
 
@@ -182,6 +206,7 @@ if __name__ == "__main__":
     scheduler.add_job(job_sync_daily_price, "cron", hour=16, minute=30)
     scheduler.add_job(job_sync_valuation, "cron", hour=16, minute=45)
     scheduler.add_job(job_sync_finance, "cron", hour=18, minute=0)
+    scheduler.add_job(job_nightly_backfill, "cron", hour=18, minute=5)
 
     logger.info("collector 调度器启动，等待定时任务...")
     scheduler.start()
