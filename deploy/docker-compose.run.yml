@@ -1,3 +1,9 @@
+# ===== VM 运行专用 compose（只运行，不编译）=====
+# 原则：VM 只跑镜像，代码以「本地构建 → docker save → 搬运 → docker load」交付。
+# 本文件无任何 build: 段 —— VM 从结构上就不可能编译，缺镜像只会报 pull 错误。
+# 部署/升级/回滚统一用 scripts/deploy-images.sh，不要手动 docker compose build。
+# 与 docker-compose.yml 的唯一差异：build: 段换成 image: 标签。
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -24,10 +30,7 @@ services:
           memory: 1536m
 
   collector:
-    build:
-      context: ../collector
-      dockerfile: Dockerfile
-    # 显式命名（构建脚本按此 tag 打版本标签 + docker save）
+    # 由 scripts/deploy-images.sh 从本地构建产物 docker load 进来
     image: steady/collector:latest
     container_name: quant-collector
     restart: unless-stopped
@@ -40,7 +43,6 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      # 仅挂日志目录；代码跑镜像内构建产物（稳定、可复现，改代码需重新 build）
       - ./logs:/app/logs
     command: python -m app.tasks
     deploy:
@@ -49,15 +51,10 @@ services:
           memory: 1024m
 
   quant-engine:
-    build:
-      context: ../quant-engine
-      dockerfile: Dockerfile
-    # 显式命名（构建脚本按此 tag 打版本标签 + docker save）
     image: steady/quant-engine:latest
     container_name: quant-engine
     restart: unless-stopped
     environment:
-      # 定时任务按北京时间触发（APScheduler 使用本地时区）
       TZ: Asia/Shanghai
     env_file:
       - .env
@@ -65,7 +62,6 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      # 仅挂日志目录；代码跑镜像内构建产物（稳定、可复现，改代码需重新 build）
       - ./logs:/app/logs
     command: python -m app.tasks
     deploy:
@@ -74,10 +70,6 @@ services:
           memory: 1024m
 
   backend:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
-    # 显式命名（构建脚本按此 tag 打版本标签 + docker save）
     image: steady/backend:latest
     container_name: quant-backend
     restart: unless-stopped
@@ -90,7 +82,7 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      # 配置留在宿主机，改 config.yaml 后重启容器即生效（不用重新 build）
+      # 配置留在宿主机，改 config.yaml 后重启容器即生效（不用重新构建镜像）
       - ../backend/configs:/app/configs
       - ./logs:/app/logs
     deploy:
@@ -99,15 +91,10 @@ services:
           memory: 256m
 
   frontend:
-    build:
-      context: ../frontend
-      dockerfile: Dockerfile
-    # 显式命名（构建脚本按此 tag 打版本标签 + docker save）
     image: steady/frontend:latest
     container_name: quant-frontend
     restart: unless-stopped
     ports:
-      # 仅本机可连；对外统一走 nginx:80
       - "127.0.0.1:3000:80"
     depends_on:
       - backend

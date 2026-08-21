@@ -32,6 +32,11 @@ logs/
 data/
 backup*.sql
 
+# ---- 部署产物（VM 本地状态，不入库）----
+deploy/images/
+deploy/RELEASES.md
+deploy/backup/
+
 # ---- IDE / 系统 ----
 .vscode/
 .idea/
