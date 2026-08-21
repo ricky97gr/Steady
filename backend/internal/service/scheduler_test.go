@@ -30,7 +30,7 @@ func TestRegisterLastRunOnRestart(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			trigger := now.Add(tc.delta)
 			if trigger.Year() != now.Year() || trigger.YearDay() != now.YearDay() {
-			t.Skipf("触发时刻跨天（now=%s delta=%s），跳过该边界场景", now.Format("15:04"), tc.delta)
+				t.Skipf("触发时刻跨天（now=%s delta=%s），跳过该边界场景", now.Format("15:04"), tc.delta)
 			}
 			s.jobs = nil
 			s.Register("job", trigger.Hour(), trigger.Minute(), func() error { return nil })

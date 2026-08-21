@@ -204,7 +204,7 @@ func runNavSnapshot(log *zap.Logger, taskRunSvc *service.TaskRunService, db *gor
 			map[string]interface{}{
 				"trade_date": latest.Format("2006-01-02"), "skipped": res.Skipped,
 				"nav": navRow.Nav, "daily_return": navRow.DailyReturn,
-			"drawdown": navRow.Drawdown, "total_asset": navRow.TotalAsset,
+				"drawdown": navRow.Drawdown, "total_asset": navRow.TotalAsset,
 			})
 	} else {
 		recordTask(log, taskRunSvc, "nav_snapshot", *latest, "success",
