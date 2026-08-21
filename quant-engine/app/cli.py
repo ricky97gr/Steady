@@ -68,10 +68,10 @@ def cmd_notify(args) -> bool:
     cfg = load_config(db)
     db.close()
     if not cfg["enabled"]:
-        logger.error("飞书通知未启用（app_config.feishu.enabled 或 FEISHU_NOTIFY_ENABLED）")
+        logger.error("飞书通知未启用（请在设置页开启 app_config.feishu.enabled）")
         return False
     if not cfg["webhook"]:
-        logger.error("未配置 webhook（app_config.feishu.webhook_url 或 FEISHU_WEBHOOK_URL）")
+        logger.error("未配置 webhook（请在设置页填写 app_config.feishu.webhook_url）")
         return False
     notifier = FeishuNotifier(cfg)
     ok = notifier.send_test(wait=True)

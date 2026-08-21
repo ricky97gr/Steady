@@ -1,6 +1,6 @@
 """飞书自定义机器人推送（统一通知传输层）
 
-- 配置读 app_config 表（页面可改，值以库为准）；库空值回退 .env 兜底
+- 配置读 app_config 表（页面可改，值以库为准）；不读环境变量，未配置即禁用
 - 异步发送（daemon 线程），失败不阻塞调用方；有限重试 + 超时
 - webhook 日志脱敏，绝不打印完整 token
 - 卡片结构：interactive 富文本，标题 + lark_md 摘要 + Dashboard 链接
@@ -13,7 +13,6 @@ import hashlib
 import hmac
 import json
 import logging
-import os
 import threading
 import time
 import urllib.request
@@ -36,17 +35,6 @@ _KEYMAP = {
     "feishu.at_all": "at_all",
 }
 
-# .env 兜底键
-_ENV_KEYS = {
-    "enabled": "FEISHU_NOTIFY_ENABLED",
-    "webhook": "FEISHU_WEBHOOK_URL",
-    "dashboard": "DASHBOARD_URL",
-    "timeout": "FEISHU_REQUEST_TIMEOUT",
-    "max_retries": "FEISHU_MAX_RETRIES",
-    "secret": "FEISHU_SECRET",
-    "at_all": "FEISHU_AT_ALL",
-}
-
 
 def gen_sign(secret: str, timestamp: int) -> str:
     """飞书机器人签名：sign = base64(hmac_sha256(key=f"{ts}\n{secret}", msg=b""))
@@ -61,8 +49,12 @@ def gen_sign(secret: str, timestamp: int) -> str:
 
 
 def load_config(db=None) -> dict:
-    """加载飞书配置：app_config 表优先，空值回退环境变量"""
-    vals = {k: os.getenv(_ENV_KEYS[k], "") for k in _ENV_KEYS}
+    """加载飞书配置：仅从 app_config 表读取（页面可改，值以库为准）
+
+    不读环境变量——按「业务配置全走页面，env 层只保留数据库凭据」原则；
+    库未配置或读取失败 → enabled=False（通知不发送，不阻塞主业务）。
+    """
+    vals = {k: "" for k in _KEYMAP.values()}
     if db is not None:
         try:
             for row in db.execute(select(AppConfig)).scalars():
@@ -71,7 +63,7 @@ def load_config(db=None) -> dict:
                     vals[internal] = row.value
         except Exception:
             db.rollback()
-            logger.warning("读取 app_config 失败，回退环境变量", exc_info=True)
+            logger.warning("读取 app_config 失败，按未配置处理", exc_info=True)
     return {
         "enabled": str(vals["enabled"]).strip().lower() in ("1", "true", "yes", "on"),
         "webhook": (vals["webhook"] or "").strip(),
