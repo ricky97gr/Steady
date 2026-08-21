@@ -2,12 +2,14 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: quant-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     ports:
-      - "5432:5432"
+      # 仅本机可连（pg_dump / 调试用），不暴露到局域网
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -16,12 +18,17 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1536m
 
   collector:
     build:
       context: ../collector
       dockerfile: Dockerfile
     container_name: quant-collector
+    restart: unless-stopped
     environment:
       # 定时任务按北京时间触发（APScheduler 使用本地时区）
       TZ: Asia/Shanghai
@@ -31,15 +38,20 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ../collector:/app
+      # 仅挂日志目录；代码跑镜像内构建产物（稳定、可复现，改代码需重新 build）
       - ./logs:/app/logs
     command: python -m app.tasks
+    deploy:
+      resources:
+        limits:
+          memory: 1024m
 
   quant-engine:
     build:
       context: ../quant-engine
       dockerfile: Dockerfile
     container_name: quant-engine
+    restart: unless-stopped
     environment:
       # 定时任务按北京时间触发（APScheduler 使用本地时区）
       TZ: Asia/Shanghai
@@ -49,39 +61,57 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ../quant-engine:/app
+      # 仅挂日志目录；代码跑镜像内构建产物（稳定、可复现，改代码需重新 build）
       - ./logs:/app/logs
     command: python -m app.tasks
+    deploy:
+      resources:
+        limits:
+          memory: 1024m
 
   backend:
     build:
       context: ../backend
       dockerfile: Dockerfile
     container_name: quant-backend
+    restart: unless-stopped
     env_file:
       - .env
     ports:
-      - "8080:8080"
+      # 仅本机可连（curl 调试），外网只走 nginx:80；API 无鉴权，绝不能直接暴露
+      - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
+      # 配置留在宿主机，改 config.yaml 后重启容器即生效（不用重新 build）
       - ../backend/configs:/app/configs
       - ./logs:/app/logs
+    deploy:
+      resources:
+        limits:
+          memory: 256m
 
   frontend:
     build:
       context: ../frontend
       dockerfile: Dockerfile
     container_name: quant-frontend
+    restart: unless-stopped
     ports:
-      - "3000:80"
+      # 仅本机可连；对外统一走 nginx:80
+      - "127.0.0.1:3000:80"
     depends_on:
       - backend
+    deploy:
+      resources:
+        limits:
+          memory: 128m
 
   nginx:
     image: nginx:alpine
     container_name: quant-nginx
+    restart: unless-stopped
     ports:
       - "80:80"
     volumes:
@@ -89,6 +119,10 @@ services:
     depends_on:
       - backend
       - frontend
+    deploy:
+      resources:
+        limits:
+          memory: 128m
 
 volumes:
   postgres_data:
