@@ -52,13 +52,14 @@ func main() {
 		log.Fatal("自动迁移失败", zap.Error(err))
 	}
 
-	// 4. 交易/通知/执行服务 + 调度器（Sprint 5：19:35 自动下单 / 21:05 净值快照）
+	// 4. 交易/通知/执行服务 + 调度器（Sprint 5：19:35 自动下单 / 21:05 净值快照 / 21:15 对账校验）
 	tradingSvc := service.NewTradingService(db, cfg.Account)
 	navSvc := service.NewNavService(db, cfg.Account)
 	taskRunSvc := service.NewTaskRunService(db)
 	notifySvc := service.NewNotifyService(db)
 	executeSvc := service.NewExecuteService(db, tradingSvc, navSvc, taskRunSvc, notifySvc)
 	briefSvc := service.NewMorningBriefService(db)
+	consistencySvc := service.NewConsistencyService(db, taskRunSvc, notifySvc)
 
 	sched := service.NewScheduler(log)
 	accountRepo := repository.NewAccountRepository(db)
@@ -68,6 +69,9 @@ func main() {
 	})
 	sched.Register("nav-snapshot", 21, 5, func() error {
 		return runNavSnapshot(log, taskRunSvc, db, navSvc, accountRepo, dailyRepo)
+	})
+	sched.Register("consistency-check", 21, 15, func() error {
+		return runConsistencyCheck(log, taskRunSvc, consistencySvc, dailyRepo)
 	})
 	go sched.Start()
 
@@ -183,6 +187,36 @@ func runNavSnapshot(log *zap.Logger, taskRunSvc *service.TaskRunService, db *gor
 	} else {
 		log.Info("净值快照完成", zap.String("trade_date", latest.Format("2006-01-02")),
 			zap.Float64("nav", res.Nav))
+	}
+	return nil
+}
+
+// runConsistencyCheck 21:15 每日对账校验（晚于 21:05 净值快照）。
+// 检查结果与卡片推送由 ConsistencyService.CheckDay 内部处理（台账幂等 upsert）。
+func runConsistencyCheck(log *zap.Logger, taskRunSvc *service.TaskRunService,
+	consistencySvc *service.ConsistencyService,
+	dailyRepo *repository.DailyRepository) error {
+
+	latest, err := dailyRepo.GetLatestTradeDate()
+	if err != nil {
+		return fmt.Errorf("查询最近交易日失败: %w", err)
+	}
+	if latest == nil {
+		log.Info("无行情数据，跳过对账校验")
+		return nil
+	}
+	res, err := consistencySvc.CheckDay(*latest)
+	if err != nil {
+		recordTask(log, taskRunSvc, "consistency_check", *latest, "failed", "对账校验异常",
+			map[string]interface{}{"trade_date": latest.Format("2006-01-02")})
+		return err
+	}
+	if res.Passed {
+		log.Info("对账校验通过", zap.String("trade_date", latest.Format("2006-01-02")),
+			zap.Bool("idle", res.Idle))
+	} else {
+		log.Warn("对账校验未通过", zap.String("trade_date", latest.Format("2006-01-02")),
+			zap.Int("violations", len(res.Violations)))
 	}
 	return nil
 }
