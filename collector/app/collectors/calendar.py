@@ -7,6 +7,7 @@ import akshare as ak
 from app.collectors.base import BaseCollector
 from app.db import upsert
 from app.models.tables import TradeCalendar
+from app.sources import tushare
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,17 @@ class CalendarCollector(BaseCollector):
     """拉取 A 股交易日历（新浪源返回全部交易日，全年）"""
 
     def fetch(self, *args, **kwargs) -> list[dict]:
+        # Tushare 主源：trade_cal（近 2 年 + 未来 1 年，1 次调用）
+        pro = tushare.make_pro(self.db)
+        if pro is not None:
+            try:
+                rows = tushare.trade_cal_rows(pro)
+                if not rows:
+                    raise RuntimeError("Tushare 交易日历未返回数据")
+                logger.info("Tushare 拉取交易日 %s 天", len(rows))
+                return rows
+            except Exception as e:
+                logger.warning("Tushare 交易日历失败(%s)，降级 AkShare", e)
         df = ak.tool_trade_date_hist_sina()
         rows = [
             {
