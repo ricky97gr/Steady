@@ -5,6 +5,7 @@
 正负值判断留给因子计算侧（pe<=0 不参与价值横截面）。
 """
 import logging
+from datetime import date, timedelta
 
 import akshare as ak
 import pandas as pd
@@ -12,6 +13,7 @@ import pandas as pd
 from app.collectors.base import BaseCollector
 from app.db import upsert
 from app.models.tables import DailyValuation
+from app.sources import tushare
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,19 @@ class ValuationCollector(BaseCollector):
     """日度估值采集（东财，按股票全量拉取）"""
 
     def fetch(self, code: str, *args, **kwargs) -> list[dict]:
+        # Tushare 主源：daily_basic 按股票近一年（主增量走 tasks 的按日全市场快照）
+        pro = tushare.make_pro(self.db)
+        if pro is not None:
+            try:
+                today = date.today()
+                rows = tushare.daily_basic_rows(
+                    pro, code, today - timedelta(days=365), today)
+                if not rows:
+                    raise RuntimeError(f"{code} Tushare 估值未返回数据")
+                logger.info("%s Tushare 拉取 %s 条估值", code, len(rows))
+                return rows
+            except Exception as e:
+                logger.warning("%s Tushare 估值失败(%s)，降级 AkShare", code, e)
         df = ak.stock_value_em(symbol=code)
         logger.info("AkShare 返回 %s 估值 %s 条", code, len(df))
         return to_rows(code, df)

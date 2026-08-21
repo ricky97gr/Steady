@@ -395,5 +395,6 @@ INSERT INTO app_config (key, value, value_type, description) VALUES
     ('llm.provider',         'openai','string', '大模型提供商'),
     ('llm.model',            '',      'string', '大模型名称'),
     ('llm.api_key',          '',      'secret', '大模型 API Key'),
-    ('llm.base_url',         '',      'string', '大模型 Base URL')
+    ('llm.base_url',         '',      'string', '大模型 Base URL'),
+    ('tushare.token',        '',      'secret', 'Tushare Pro token（数据主源，页面配置；空则走 AkShare）')
 ON CONFLICT (key) DO NOTHING;

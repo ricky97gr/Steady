@@ -26,6 +26,7 @@ import type {
   StockListQuery,
   TaskRunsData,
   TradesData,
+  TushareConfig,
 } from '../types'
 
 // 业务错误：code 为后端业务码（40001/40004/50001），status 为 HTTP 状态（网络错误时为 0）
@@ -194,6 +195,24 @@ export async function getTaskRuns(limit = 20): Promise<TaskRunsData> {
   return resp.data.data
 }
 
+// ---- 数据源配置（Tushare）----
+
+export async function getTushareConfig(): Promise<TushareConfig> {
+  const resp = await http.get<ApiResponse<TushareConfig>>('/config/tushare')
+  return resp.data.data
+}
+
+export async function updateTushareConfig(token: string): Promise<{ updated: boolean }> {
+  const resp = await http.put<ApiResponse<{ updated: boolean }>>('/config/tushare', { token })
+  return resp.data.data
+}
+
+// token 为空时用已存 token 测试；返回后端校验错误信息（成功提示由调用方处理）
+export async function testTushare(token: string): Promise<{ ok: boolean }> {
+  const resp = await http.post<ApiResponse<{ ok: boolean }>>('/config/tushare/test', { token })
+  return resp.data.data
+}
+
 // 手动触发 ExecuteDay + SnapshotDay（Trade 页兜底按钮）
 export async function manualExecuteDay(): Promise<ExecuteDayResult> {
   const resp = await http.post<ApiResponse<ExecuteDayResult>>('/trading/execute-day')
@@ -232,4 +251,7 @@ export const api = {
   getTaskRuns,
   manualExecuteDay,
   getMorningBrief,
+  getTushareConfig,
+  updateTushareConfig,
+  testTushare,
 }

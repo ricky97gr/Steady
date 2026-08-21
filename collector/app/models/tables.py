@@ -100,6 +100,21 @@ class TradeCalendar(Base):
     exchange = Column(String(10), default="SSE")
 
 
+class AppConfig(Base):
+    """应用配置键值表（Tushare token 等，页面可改；值以库为准，不读环境变量）
+
+    与 quant-engine/models/tables.py 同构，仅采集侧读 token 用。
+    """
+
+    __tablename__ = "app_config"
+
+    key = Column(String, primary_key=True)
+    value = Column(String)
+    value_type = Column(String(16), nullable=False, default="string")  # bool/int/string/secret
+    description = Column(String)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class MarketHotspot(Base):
     """市场热点快照（早盘简报数据源，Issue #4）：每日早晨采集一次。
 

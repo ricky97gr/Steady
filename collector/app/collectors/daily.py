@@ -16,6 +16,7 @@ from app.cleaners import clean_daily_rows
 from app.config import REQUEST_TIMEOUT
 from app.db import upsert
 from app.models.tables import DailyPrice
+from app.sources import tushare
 
 logger = logging.getLogger(__name__)
 
@@ -136,22 +137,51 @@ class DailyCollector(BaseCollector):
     """按股票代码拉取日K行情，经质量校验后入库"""
 
     def fetch(self, code: str, start_date, end_date, *args, **kwargs) -> list[dict]:
+        # Tushare 主源：daily + adj_factor 一次拉取，失败/空数据降级 AkShare
+        pro = tushare.make_pro(self.db)
+        if pro is not None:
+            try:
+                raw, hfq = tushare.daily_pairs(pro, code, start_date, end_date)
+                if raw.empty:
+                    raise RuntimeError(f"{code} Tushare 未返回数据")
+                rows = build_rows(code, raw, hfq)
+                logger.info("%s Tushare 拉取 %s 条日行情", code, len(rows))
+                return rows
+            except Exception as e:
+                logger.warning("%s Tushare 失败(%s)，降级 AkShare", code, e)
         start = to_ak_date(start_date)
         end = to_ak_date(end_date)
         # 后复权用于计算复权因子（因子计算用前复权价，此处只需因子比例）
         raw, hfq = fetch_pair(code, start, end)
         rows = build_rows(code, raw, hfq)
-        logger.info("%s 拉取 %s 条日行情", code, len(rows))
+        logger.info("%s AkShare 拉取 %s 条日行情", code, len(rows))
         return rows
 
     def save(self, data):
         code = data[0]["code"] if data else "-"
-        clean = clean_daily_rows(code, data)
+        n = upsert_daily_rows(self.db, data)
+        logger.info("%s 入库 %s 条（丢弃 %s 条）", code, n, len(data) - n)
+        return True
+
+
+def upsert_daily_rows(db, data: list[dict]) -> int:
+    """清洗 + upsert 日行情（按 code 分组，兼容单只与全市场快照批量）
+
+    供 DailyCollector.save 与 tasks 的 Tushare 全市场快照共用。
+    """
+    from collections import defaultdict
+
+    by_code: dict[str, list[dict]] = defaultdict(list)
+    for r in data:
+        by_code[r["code"]].append(r)
+    table_cols = set(DailyPrice.__table__.columns.keys())
+    total = 0
+    for code, items in by_code.items():
         # prev_close 仅供涨跌幅校验使用，入库前过滤掉
-        table_cols = set(DailyPrice.__table__.columns.keys())
+        clean = clean_daily_rows(code, items)
         clean = [{k: r[k] for k in table_cols if k in r} for r in clean]
         upsert(
-            self.db,
+            db,
             DailyPrice,
             clean,
             conflict_cols=["code", "trade_date"],
@@ -159,6 +189,5 @@ class DailyCollector(BaseCollector):
                 "open", "high", "low", "close", "volume", "amount", "adj_factor",
             ],
         )
-        logger.info("%s 入库 %s 条（丢弃 %s 条）", code, len(clean),
-                    len(data) - len(clean))
-        return True
+        total += len(clean)
+    return total

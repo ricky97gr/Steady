@@ -7,6 +7,7 @@ import pandas as pd
 from app.collectors.base import BaseCollector
 from app.db import upsert
 from app.models.tables import StockBasic
+from app.sources import tushare
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,17 @@ class StockCollector(BaseCollector):
     """从 AkShare 拉取全市场股票列表并入库（含 universe 标记）"""
 
     def fetch(self, *args, **kwargs) -> list[dict]:
+        # Tushare 主源：stock_basic（自带 list_date，省 3 个交易所请求；无则回退）
+        pro = tushare.make_pro(self.db)
+        if pro is not None:
+            try:
+                rows = tushare.stock_basic_rows(pro)
+                if not rows:
+                    raise RuntimeError("Tushare 股票列表未返回数据")
+                logger.info("Tushare 返回股票 %s 只", len(rows))
+                return rows
+            except Exception as e:
+                logger.warning("Tushare 股票列表失败(%s)，降级 AkShare", e)
         df = ak.stock_info_a_code_name()
         logger.info("AkShare 返回股票 %s 只", len(df))
         return normalize_stock_rows(df)
@@ -136,7 +148,9 @@ class StockCollector(BaseCollector):
         #    与 finance.py 行业回填同理）
         from sqlalchemy import text
 
-        dates = fetch_list_dates()
+        # Tushare 列表自带 list_date 时直接回填；否则走交易所接口补全
+        ts_dates = {r["code"]: r["list_date"] for r in data if r.get("list_date")}
+        dates = ts_dates or fetch_list_dates()
         if dates:
             self.db.execute(
                 text("UPDATE stock_basic SET list_date = :d WHERE code = :code"),

@@ -28,6 +28,7 @@ func SetupRouter(db *gorm.DB, tradingSvc *service.TradingService,
 	tradeRepo := repository.NewTradeRepository(db)
 	backtestRepo := repository.NewBacktestRepository(db)
 	backtestSvc := service.NewBacktestService(backtestRepo)
+	tushareSvc := service.NewTushareConfigService(db)
 
 	// 基础路径 /api/v1
 	v1 := r.Group("/api/v1")
@@ -70,6 +71,11 @@ func SetupRouter(db *gorm.DB, tradingSvc *service.TradingService,
 
 		// 早盘简报（Issue #4）
 		v1.GET("/morning-brief", handler.GetMorningBrief(briefSvc))
+
+		// 数据源配置（Tushare token，页面可改）
+		v1.GET("/config/tushare", handler.GetTushareConfig(tushareSvc))
+		v1.PUT("/config/tushare", handler.UpdateTushareConfig(tushareSvc))
+		v1.POST("/config/tushare/test", handler.TestTushare(tushareSvc))
 	}
 
 	return r
