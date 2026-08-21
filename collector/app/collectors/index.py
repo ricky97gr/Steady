@@ -12,6 +12,7 @@ import pandas as pd
 from app.collectors.base import BaseCollector
 from app.db import upsert
 from app.models.tables import DailyPrice, StockBasic
+from app.sources import tushare
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +49,20 @@ class IndexCollector(BaseCollector):
 
     def fetch(self, symbol: str = "sh000300", start_date=None, end_date=None,
               *args, **kwargs) -> list[dict]:
+        # Tushare 主源：index_daily（指数无缺口，1 次拉全量区间）
+        pro = tushare.make_pro(self.db)
+        if pro is not None:
+            try:
+                rows = tushare.index_daily_rows(pro, symbol, start_date, end_date)
+                if not rows:
+                    raise RuntimeError(f"{symbol} Tushare 指数未返回数据")
+                logger.info("%s Tushare 拉取指数行情 %s 条", symbol, len(rows))
+                return rows
+            except Exception as e:
+                logger.warning("%s Tushare 指数失败(%s)，降级 AkShare", symbol, e)
         df = ak.stock_zh_index_daily(symbol=symbol)
         rows = build_rows(symbol, df, start_date, end_date)
-        logger.info("%s 拉取指数行情 %s 条", symbol, len(rows))
+        logger.info("%s AkShare 拉取指数行情 %s 条", symbol, len(rows))
         return rows
 
     def save(self, data):
