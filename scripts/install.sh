@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ===== Steady 安装/升级脚本（VM 唯一入口，幂等）=====
-# 与 config.tar.gz、steady-images-*.tar.gz 放在同一发布目录里运行：./install.sh
+# 与 config.tar.gz、steady-images*.tar.gz 放在同一发布目录里运行：./install.sh
 # 自动完成：解压配置包 → 生成 .env（首次）→ 加载镜像 → compose up -d → 记录版本
 # 升级：把新版三件套目录拷进来再跑一次；.env（数据库密码）已存在则保留。
 # 生产 = master 分支产物（版本号在目录名里）。
@@ -29,9 +29,9 @@ else
   echo "   ✔ .env 已存在，保留（数据库密码不变）"
 fi
 
-echo "==> 3/4 加载镜像（取最新一份 steady-images-*.tar.gz）"
-IMAGES=$(ls -1t steady-images-*.tar.gz 2>/dev/null | head -1)
-[ -n "$IMAGES" ] || { echo "❌ 缺少 steady-images-*.tar.gz（须与 install.sh 同目录）"; exit 1; }
+echo "==> 3/4 加载镜像（取最新一份 steady-images*.tar.gz）"
+IMAGES=$(ls -1t steady-images*.tar.gz 2>/dev/null | head -1)
+[ -n "$IMAGES" ] || { echo "❌ 缺少 steady-images*.tar.gz（须与 install.sh 同目录）"; exit 1; }
 echo "   -> $IMAGES"
 gunzip -c "$IMAGES" | docker load
 
