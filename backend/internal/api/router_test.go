@@ -41,10 +41,10 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("连接测试库失败: %v", err)
 	}
-	if err := db.Exec("DROP TABLE IF EXISTS daily_price, financial_indicator, stock_basic CASCADE").Error; err != nil {
+	if err := db.Exec("DROP TABLE IF EXISTS daily_price, financial_indicator, stock_basic, daily_valuation CASCADE").Error; err != nil {
 		t.Fatalf("清理测试表失败: %v", err)
 	}
-	if err := db.AutoMigrate(&model.StockBasic{}, &model.DailyPrice{}, &model.FinancialIndicator{}); err != nil {
+	if err := db.AutoMigrate(&model.StockBasic{}, &model.DailyPrice{}, &model.FinancialIndicator{}, &model.DailyValuation{}); err != nil {
 		t.Fatalf("AutoMigrate 失败: %v", err)
 	}
 	seedTestData(t, db)
