@@ -1,8 +1,8 @@
 # ===== VM 运行专用 compose（只运行，不编译）=====
 # 原则：VM 只跑镜像，代码以「本地构建 → docker save → 搬运 → docker load」交付。
 # 本文件无任何 build: 段 —— VM 从结构上就不可能编译，缺镜像只会报 pull 错误。
-# 部署/升级/回滚统一用 scripts/deploy-images.sh，不要手动 docker compose build。
-# 与 docker-compose.yml 的唯一差异：build: 段换成 image: 标签。
+# 安装/升级/回滚统一用 install.sh（三件套发布目录内）。
+# 自包含：所有挂载相对本目录（nginx/ postgres/ configs/ logs/），整目录可搬到任意位置。
 
 services:
   postgres:
@@ -30,7 +30,7 @@ services:
           memory: 1536m
 
   collector:
-    # 由 scripts/deploy-images.sh 从本地构建产物 docker load 进来
+    # 由 install.sh 从发布产物 docker load 进来
     image: steady/collector:latest
     container_name: quant-collector
     restart: unless-stopped
@@ -82,8 +82,8 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      # 配置留在宿主机，改 config.yaml 后重启容器即生效（不用重新构建镜像）
-      - ../backend/configs:/app/configs
+      # 配置留在宿主机（自包含目录内的 configs/），改 config.yaml 后重启容器即生效
+      - ./configs/config.yaml:/app/configs/config.yaml
       - ./logs:/app/logs
     deploy:
       resources:

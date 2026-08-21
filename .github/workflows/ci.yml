@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main, dev]
+    branches: [master, dev]
   pull_request:
-    branches: [dev, main]
+    branches: [dev, master]
 
 jobs:
   # ===== Go 后端测试 =====

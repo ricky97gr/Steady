@@ -1,87 +1,94 @@
 # Steady 部署运维手册
 
-> 目标机器：ESXi 上的 Linux VM（2C7G/100G）。**VM 只运行、不编译**——
-> 镜像在开发机构建后以 tar 包搬运，版本以 git 提交 SHA 标识，支持秒级回滚。
+> 目标：ESXi 上的 Linux VM（2C7G/100G）。**VM 只运行、不编译**。
+> 分支模型：**生产只发 `master`**，本地开发在 `dev`。
+> 交付物：一个发布目录（安装脚本 + 配置包 + 镜像包），VM 上只跑一个脚本。
 
-## 架构约定
+## 分支与发布模型
 
-| 载体 | 内容 | 升级方式 |
-|---|---|---|
-| **镜像**（`steady/*`） | 业务代码（collector/quant-engine/backend/frontend） | 本地构建 → 搬运 → `load` |
-| **仓库文件**（git clone） | compose / nginx.conf / init.sql / config.yaml / 脚本 | VM 上 `git pull` |
-| **`deploy/.env`** | 仅数据库凭据（唯一密钥，chmod 600） | 手动改，不入库 |
-| **`app_config` 表** | 飞书/Tushare 等业务配置 | 设置页改，以库为准 |
-| **`postgres_data` 卷** | 数据库数据 | 升级不动，永不删 |
+```text
+dev 分支（日常开发）  ──发布时──▶  master 分支（生产唯一来源）  ──build-release.sh──▶  release 目录  ──scp──▶  VM
+```
+
+- `master` 是生产唯一来源，`build-release.sh` 校验当前分支，非 master 拒绝打包。
+- 发版动作：`git checkout master && git merge dev && git push`，然后在本地 `./scripts/build-release.sh`。
+
+## 交付物（三件套）
+
+`build-release.sh`（本地、master 分支）产出 `deploy/release/steady-<日期>-<短SHA>/`：
+
+| 文件 | 作用 |
+|---|---|
+| `install.sh` | VM 唯一入口，自动：解压配置 → 生成 .env（首次）→ 加载镜像 → `compose up -d` |
+| `config.tar.gz` | 配置包：compose / nginx.conf / init.sql / config.yaml / .env.example / backup 脚本 |
+| `steady-images.tar.gz` | 4 个业务镜像（collector / quant-engine / backend / frontend） |
+
+postgres / nginx 来自 Docker Hub，无需打包。
 
 ## 首次部署（VM）
 
+**0. 系统准备（一次性）：**
 ```bash
-# 1. Docker 引擎 + compose 插件
-curl -fsSL https://get.docker.com | sh
-sudo systemctl enable --now docker
-
-# 2. 拉仓库（只取文件，不编译）
-git clone https://github.com/ricky97gr/Steady.git
-cd Steady/deploy
-
-# 3. 数据库凭据（页面配置不了：页面本身要连库，密码须跳出这条链路）
-cp .env.example .env
-vim .env    # DB_PASSWORD = $(openssl rand -hex 24)
-chmod 600 .env
-
-# 4. 从开发机拿镜像包（见下），然后发布
-~/Steady/scripts/deploy-images.sh ~/steady-XXXX.tar.gz
+# SSH 密钥登录已配好；可选：sshd 只监听内网 IP
+# echo 'ListenAddress <内网IP>' | sudo tee -a /etc/ssh/sshd_config && sudo sshd -t && sudo systemctl restart ssh
 ```
 
-## 发布新版本（升级）
-
-**开发机（每次发版）**：
+**1. 本机构建发布产物（须在 master 分支）：**
 ```bash
-./scripts/build-images.sh          # 构建 + 打 g<SHA> 标签 + 打包 deploy/images/steady-<日期>-<SHA>.tar.gz
-scp deploy/images/steady-*.tar.gz  <user>@<vm-ip>:~
+git checkout master && git merge dev && git push
+./scripts/build-release.sh
+scp -r deploy/release/steady-<日期>-<SHA> <user>@<vm-ip>:~/
 ```
 
-**VM（应用）**：
+**2. VM 安装（唯一命令）：**
 ```bash
-cd Steady
-./scripts/deploy-images.sh ~/steady-<日期>-<SHA>.tar.gz
+cd ~/steady-<日期>-<SHA>
+./install.sh
 ```
 
-要点：
-- 只拉镜像包不够时，若 compose/nginx.conf/config.yaml 也有改动，先 `git pull`。
-- 版本 = 镜像包文件名里的 `日期-SHA`；`g<SHA>` 就是镜像标签，对应确切代码提交，可追溯。
+install.sh 自动完成：解压配置包 → 生成 `.env`（随机 24 字节数据库强密码并打印，**请抄录**）→ 加载镜像 → `compose up -d` → 写入 `RELEASES.md` → 打印容器状态。
 
-## 回滚（一键回到上一版）
+## 升级
 
 ```bash
-# 保留上一份 tar 包即可（VM 上 deploy/images/ 建议留最近 3 份）
-./scripts/deploy-images.sh ~/steady-<上一个-日期>-<上一个-SHA>.tar.gz
+# 本地（master 分支）：改代码合入 master → 重新打包
+./scripts/build-release.sh && scp -r deploy/release/steady-* <user>@<vm-ip>:~/
+# VM：进新目录再跑一次即可
+cd ~/steady-<新版本> && ./install.sh
 ```
 
-原理：`docker load` 会把 `:latest` 指回旧镜像 ID，compose `up -d` 检测到变化即重建。
-数据库在命名卷里，**回滚不影响任何数据**。
+幂等：`.env` 已存在则保留（数据库密码不变），新配置覆盖、新镜像加载、`up -d` 只重建有变化的容器。
 
-## 查看当前运行版本
+## 回滚
 
 ```bash
-cat deploy/RELEASES.md                                   # 发布历史（脚本自动追加）
-docker compose -f docker-compose.run.yml ps              # 容器与镜像
-docker image inspect steady/backend --format '{{join .RepoTags ","}}'   # 含 g<SHA> 标签
+# 只要旧版本目录还在，进去跑 install.sh 就回到旧版（旧镜像 load 会覆盖 :latest）
+cd ~/steady-<旧版本> && ./install.sh
+```
+
+数据库在命名卷里，**回滚/升级都不动数据**。
+
+## 查看当前版本
+
+```bash
+cat RELEASES.md                                    # 发布历史
+docker compose -f docker-compose.run.yml ps        # 容器状态
 ```
 
 ## 备份与恢复
 
 ```bash
-# 每天 02:30 全库 gzip 备份到 deploy/backup/，留 30 份
-crontab -e    # 30 2 * * * /path/Steady/scripts/backup-db.sh
+# 每天 02:30 全库 gzip 备份到 backup/，留 30 份（backup-db.sh 在 config 包内已就位）
+crontab -e    # 30 2 * * * /home/<user>/steady-*/scripts/backup-db.sh
 
 # 恢复
-gunzip -c deploy/backup/quant_system_YYYYMMDD_HHMMSS.sql.gz | \
+gunzip -c backup/quant_system_YYYYMMDD_HHMMSS.sql.gz | \
   docker exec -i quant-postgres psql -U quant -d quant_system
 ```
 
 ## 安全基线
 
-- 仅 `nginx:80` 对外；backend/postgres/frontend 全部绑定 `127.0.0.1`（API 无鉴权，绝不直接暴露）。
-- `.env` 只存数据库凭据，chmod 600，gitignored；业务配置全走设置页 → `app_config`。
-- VM 上开启防火墙仅放行 80/22（及 SSH 来源白名单）。
+- **仅内网**：路由器不要给 22/80 做端口转发；SSH 密钥登录、禁密码/root。
+- Docker 发布的端口不走 ufw（走 FORWARD 链），nginx:80 的边界靠 compose 绑定：默认 `80:80`（NAT 内网下即仅内网可达）；要更严格可在 `.env` 设 `HOST_LAN_IP=<内网IP>` 绑定单 IP，或保持 `127.0.0.1` + SSH 隧道。
+- backend / postgres / frontend 全部绑定 `127.0.0.1`（API 无鉴权，绝不直接暴露）。
+- `.env` 只存数据库凭据，chmod 600；业务配置（飞书/Tushare 等）全走设置页 → `app_config` 表。
