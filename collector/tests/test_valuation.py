@@ -5,7 +5,7 @@ import pandas as pd
 
 from app.collectors import valuation as val_mod
 from app.collectors.valuation import ValuationCollector, to_rows
-from tests.helpers import multi_values
+from tests.helpers import multi_values, write_execs
 
 
 def make_valuation_df():
@@ -60,8 +60,9 @@ def test_run_upserts_valuation_rows(monkeypatch):
     db = FakeSession()
     ok = ValuationCollector(db).run("600519")
     assert ok
-    assert len(db.executed) == 1
-    values = multi_values(db.executed[0])
+    writes = write_execs(db)  # 过滤掉 fetch 里读 tushare.token 的 select
+    assert len(writes) == 1
+    values = multi_values(writes[0])
     assert values[0]["code"] == "600519"
     assert values[0]["trade_date"] == date(2026, 8, 19)
     assert len(values) == 3

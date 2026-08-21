@@ -1,4 +1,14 @@
 """测试助手"""
+from sqlalchemy.sql import Select
+
+
+def write_execs(db) -> list:
+    """过滤掉只读查询（配置读取等），只留写入语句。
+
+    collector 各采集器 fetch 现在会先读 app_config 拿 Tushare token，
+    FakeSession.executed 里会多一条 select；断言"第几次 execute"时应先过滤。
+    """
+    return [s for s in db.executed if not isinstance(s, Select)]
 
 
 def row_values(r: dict) -> dict:
