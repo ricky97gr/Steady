@@ -7,16 +7,20 @@ import type {
   ApiResponse,
   BacktestJobItem,
   BacktestsData,
+  BriefInterpretation,
   ExecuteDayResult,
   FeishuConfig,
   FinancialListData,
   IndexNavData,
   KLineData,
+  LLMConfig,
+  LLMConfigUpdate,
   MorningBriefData,
   NotifyConfigData,
   NotifyEvent,
   OrdersData,
   PositionsData,
+  ProjectAnswer,
   SignalHistoryData,
   SignalQuery,
   SignalsData,
@@ -25,6 +29,7 @@ import type {
   StockListData,
   StockListQuery,
   TaskRunsData,
+  TermExplanation,
   TradesData,
   TushareConfig,
 } from '../types'
@@ -227,6 +232,42 @@ export async function getMorningBrief(date?: string): Promise<MorningBriefData> 
   return resp.data.data
 }
 
+// ---- 大模型能力（LLM）----
+
+export async function getLLMConfig(): Promise<LLMConfig> {
+  const resp = await http.get<ApiResponse<LLMConfig>>('/config/llm')
+  return resp.data.data
+}
+
+export async function updateLLMConfig(req: LLMConfigUpdate): Promise<{ updated: boolean }> {
+  const resp = await http.put<ApiResponse<{ updated: boolean }>>('/config/llm', req)
+  return resp.data.data
+}
+
+// 用已存配置测试连接（无请求体）
+export async function testLLM(): Promise<{ ok: boolean }> {
+  const resp = await http.post<ApiResponse<{ ok: boolean }>>('/config/llm/test')
+  return resp.data.data
+}
+
+export async function explainTerm(term: string): Promise<TermExplanation> {
+  const resp = await http.post<ApiResponse<TermExplanation>>('/llm/glossary', { term })
+  return resp.data.data
+}
+
+export async function askProject(question: string): Promise<ProjectAnswer> {
+  const resp = await http.post<ApiResponse<ProjectAnswer>>('/llm/ask', { question })
+  return resp.data.data
+}
+
+// briefDate 留空 = 最近一份早报
+export async function interpretBrief(briefDate?: string): Promise<BriefInterpretation> {
+  const resp = await http.post<ApiResponse<BriefInterpretation>>('/llm/interpret-brief', {
+    brief_date: briefDate ?? '',
+  })
+  return resp.data.data
+}
+
 export const api = {
   getStocks,
   getStockDetail,
@@ -254,4 +295,10 @@ export const api = {
   getTushareConfig,
   updateTushareConfig,
   testTushare,
+  getLLMConfig,
+  updateLLMConfig,
+  testLLM,
+  explainTerm,
+  askProject,
+  interpretBrief,
 }
