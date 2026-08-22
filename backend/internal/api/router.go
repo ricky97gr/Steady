@@ -14,7 +14,8 @@ func SetupRouter(db *gorm.DB, tradingSvc *service.TradingService,
 	navSvc *service.NavService, initialCash float64,
 	taskRunSvc *service.TaskRunService, notifySvc *service.NotifyService,
 	executeSvc *service.ExecuteService,
-	briefSvc *service.MorningBriefService) *gin.Engine {
+	briefSvc *service.MorningBriefService,
+	llmSvc *service.LLMService) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 
@@ -76,6 +77,14 @@ func SetupRouter(db *gorm.DB, tradingSvc *service.TradingService,
 		v1.GET("/config/tushare", handler.GetTushareConfig(tushareSvc))
 		v1.PUT("/config/tushare", handler.UpdateTushareConfig(tushareSvc))
 		v1.POST("/config/tushare/test", handler.TestTushare(tushareSvc))
+
+		// 大模型能力（LLM，云端 API，只读白名单数据入口）
+		v1.GET("/config/llm", handler.GetLLMConfig(llmSvc))
+		v1.PUT("/config/llm", handler.UpdateLLMConfig(llmSvc))
+		v1.POST("/config/llm/test", handler.TestLLM(llmSvc))
+		v1.POST("/llm/glossary", handler.ExplainTerm(llmSvc))
+		v1.POST("/llm/ask", handler.AskProject(llmSvc))
+		v1.POST("/llm/interpret-brief", handler.InterpretBrief(llmSvc))
 	}
 
 	return r
