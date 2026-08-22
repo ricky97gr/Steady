@@ -19,7 +19,7 @@ dev 分支（日常开发）  ──发布时──▶  master 分支（生产�
 
 | 文件 | 作用 |
 |---|---|
-| `install.sh` | VM 唯一入口，自动：解压配置 → 生成 .env（首次）→ 加载镜像 → `compose up -d` |
+| `install.sh` | VM 唯一入口，自动：检测既有部署 → 解压配置 → 复用/生成 .env → 加载镜像 → `compose up -d` |
 | `config.tar.gz` | 配置包：compose / nginx.conf / init.sql / config.yaml / .env.example / backup 脚本 |
 | `steady-images.tar.gz` | 4 个业务镜像（collector / quant-engine / backend / frontend） |
 
@@ -46,7 +46,9 @@ cd ~/steady-<日期>-<SHA>
 ./install.sh
 ```
 
-install.sh 自动完成：解压配置包 → 生成 `.env`（随机 24 字节数据库强密码并打印，**请抄录**）→ 加载镜像 → `compose up -d` → 写入 `RELEASES.md` → 打印容器状态。
+install.sh 自动完成：检测既有部署 → 解压配置包 → 生成 `.env`（随机 24 字节数据库强密码并打印，**请抄录**）→ 加载镜像 → `compose up -d` → 写入 `RELEASES.md` → 打印容器状态。
+
+首次部署的 compose 项目名**固定为 `steady`**（数据卷 `steady_postgres_data`）。之后升级会自动复用既有项目名，数据卷永远不变。
 
 ## 升级
 
@@ -57,7 +59,9 @@ install.sh 自动完成：解压配置包 → 生成 `.env`（随机 24 字节�
 cd ~/steady-<新版本> && ./install.sh
 ```
 
-幂等：`.env` 已存在则保留（数据库密码不变），新配置覆盖、新镜像加载、`up -d` 只重建有变化的容器。
+升级自动安全：install.sh 检测到运行中 `quant-postgres` 后，**复用其 compose 项目名与数据库密码**（`.env`）——数据卷/网络/容器名全继承，只重建镜像或配置有变化的容器。**不会**新建空数据卷或改密码。
+
+> ⚠️ 历史教训（2026-08-22 修复）：早期 install.sh 在**新目录**运行，因目录里无 `.env` 会生成新密码，且 compose 按目录名建新项目 → 新建空数据卷，升级数据"看起来丢了"。现已改为自动复用。
 
 ## 回滚
 
@@ -66,13 +70,14 @@ cd ~/steady-<新版本> && ./install.sh
 cd ~/steady-<旧版本> && ./install.sh
 ```
 
-数据库在命名卷里，**回滚/升级都不动数据**。
+数据库在命名卷里，**回滚/升级都不动数据**（卷名=项目名 + `_postgres_data`，全新安装即 `steady_postgres_data`）。
 
 ## 查看当前版本
 
 ```bash
 cat RELEASES.md                                    # 发布历史
-docker compose -f docker-compose.run.yml ps        # 容器状态
+docker compose ls                                  # 列出 compose 项目（升级后项目名为既有项目）
+docker compose -p <项目名> -f docker-compose.run.yml ps   # 容器状态（项目名见 RELEASES.md / install.sh 输出）
 ```
 
 ## 备份与恢复
