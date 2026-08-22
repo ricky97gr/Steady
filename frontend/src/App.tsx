@@ -4,6 +4,7 @@ import {
   DashboardOutlined,
   FundOutlined,
   LineChartOutlined,
+  RobotOutlined,
   ScheduleOutlined,
   SettingOutlined,
   SwapOutlined,
@@ -18,6 +19,7 @@ import StrategyPage from './pages/Strategy'
 import TradePage from './pages/Trade'
 import BacktestPage from './pages/Backtest'
 import MorningBriefPage from './pages/MorningBrief'
+import LLMPage from './pages/LLM'
 import SettingsPage from './pages/Settings'
 
 const { Sider, Content } = Layout
@@ -29,6 +31,7 @@ const menuItems = [
   { key: '/strategy', icon: <LineChartOutlined />, label: '策略' },
   { key: '/trade', icon: <SwapOutlined />, label: '模拟交易' },
   { key: '/backtest', icon: <BarChartOutlined />, label: '策略回测' },
+  { key: '/llm', icon: <RobotOutlined />, label: 'AI 助手' },
   { key: '/settings', icon: <SettingOutlined />, label: '设置' },
 ]
 
@@ -39,6 +42,7 @@ const pageTitles: Record<string, string> = {
   '/strategy': '策略',
   '/trade': '模拟交易',
   '/backtest': '策略回测',
+  '/llm': 'AI 助手',
   '/settings': '设置',
 }
 
@@ -85,6 +89,7 @@ export default function App() {
           <Route path="/strategy" element={<StrategyPage />} />
           <Route path="/trade" element={<TradePage />} />
           <Route path="/backtest" element={<BacktestPage />} />
+          <Route path="/llm" element={<LLMPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </Content>

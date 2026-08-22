@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Card, Col, DatePicker, Descriptions, Empty, Row, Space, Table, Tag } from 'antd'
+import { Button, Card, Col, DatePicker, Descriptions, Empty, Row, Space, Table, Tag } from 'antd'
+import { RobotOutlined } from '@ant-design/icons'
 import type { Dayjs } from 'dayjs'
+import { useNavigate } from 'react-router-dom'
 
 import { getMorningBrief } from '../../services/api'
 import type {
@@ -33,6 +35,7 @@ const statusTag = (s: string): React.ReactNode => {
 }
 
 export default function MorningBriefPage() {
+  const navigate = useNavigate()
   const [brief, setBrief] = useState<MorningBriefData | null>(null)
   const [date, setDate] = useState<Dayjs | null>(null)
   const [loading, setLoading] = useState(false)
@@ -132,6 +135,15 @@ export default function MorningBriefPage() {
               {sections.is_open_today ? '（开市）' : '（休市）'}
               {sections.trade_date && <> · 回顾 {sections.trade_date}</>}
             </span>
+          )}
+          {sections?.brief_date && (
+            <Button
+              type="primary"
+              icon={<RobotOutlined />}
+              onClick={() => navigate(`/llm?date=${sections.brief_date}`)}
+            >
+              AI 解读
+            </Button>
           )}
         </Space>
       </Row>

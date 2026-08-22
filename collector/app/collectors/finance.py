@@ -16,6 +16,7 @@ from sqlalchemy import and_
 from app.collectors.base import BaseCollector
 from app.db import upsert
 from app.models.tables import FinancialIndicator, StockBasic
+from app.sources import tushare
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,15 @@ class FinanceCollector(BaseCollector):
     def fetch(self, report_periods: list[str] | None = None,
               code: str | None = None, *args, **kwargs) -> list[dict]:
         periods = report_periods or []
+        # Tushare 主源：fina_indicator 按股票逐期（需 2000+ 积分；首请求失败快速降级）
+        pro = tushare.make_pro(self.db)
+        if pro is not None:
+            try:
+                rows = self._fetch_tushare(pro, periods, code)
+                logger.info("Tushare 财务拉取 %s 条", len(rows))
+                return rows
+            except Exception as e:
+                logger.warning("Tushare 财务失败(%s)，降级 AkShare", e)
         all_rows = []
         for p in periods:
             yjbb = ak.stock_yjbb_em(date=p)
@@ -110,6 +120,31 @@ class FinanceCollector(BaseCollector):
             all_rows.extend(rows)
         if code:
             all_rows = [r for r in all_rows if r["code"] == code]
+        return all_rows
+
+    def _fetch_tushare(self, pro, periods: list[str], code: str | None) -> list[dict]:
+        """Tushare 财务：按股票 × 报告期逐查；首请求失败抛异常 → 触发降级
+
+        积分不足时 fina_indicator 首个请求即报错，避免对全市场空转。
+        """
+        from sqlalchemy import select
+
+        if code:
+            codes = [code]
+        else:
+            codes = sorted(
+                self.db.execute(select(StockBasic.code)).scalars().all())
+        all_rows: list[dict] = []
+        first = True
+        for c in codes:
+            for p in periods:
+                try:
+                    all_rows.extend(tushare.fina_indicator_rows(pro, c, p))
+                except Exception as e:
+                    if first:
+                        raise  # 首个请求失败：积分/接口不可用，直接降级 AkShare
+                    logger.warning("%s 报告期 %s Tushare 财务失败: %s", c, p, e)
+                first = False
         return all_rows
 
     def save(self, data):

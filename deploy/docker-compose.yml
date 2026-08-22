@@ -93,6 +93,8 @@ services:
       # 配置留在宿主机，改 config.yaml 后重启容器即生效（不用重新 build）
       - ../backend/configs:/app/configs
       - ./logs:/app/logs
+      # LLM 知识库只读挂载（docs/llm/术语表.md + 项目知识.md，非内嵌 Go）
+      - ../docs:/app/docs:ro
     deploy:
       resources:
         limits:

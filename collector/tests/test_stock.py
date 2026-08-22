@@ -4,7 +4,7 @@ import pytest
 
 from app.collectors import stock as stock_mod
 from app.collectors.stock import StockCollector, infer_market, normalize_stock_rows
-from tests.helpers import multi_values
+from tests.helpers import multi_values, write_execs
 
 
 def test_infer_market():
@@ -66,8 +66,9 @@ def test_save_marks_universe(monkeypatch):
     db = FakeSession()
     ok = StockCollector(db).run()
     assert ok
-    # 4 次执行：upsert 列表 + upsert 股票池 + UPDATE 上市日期 + UPDATE 行业
-    assert len(db.executed) == 4
+    # 4 次写入：upsert 列表 + upsert 股票池 + UPDATE 上市日期 + UPDATE 行业
+    # （fetch 里读 tushare.token 的 select 被 write_execs 过滤）
+    assert len(write_execs(db)) == 4
     assert called == ["list", "000300", "000905"]
 
 
@@ -85,8 +86,8 @@ def test_universe_marking_values(monkeypatch):
     monkeypatch.setattr(stock_mod, "fetch_industries", lambda: {})
     db = FakeSession()
     StockCollector(db).run()
-    # 第二次 upsert 语句的值应含 universe 标记
-    values = multi_values(db.executed[1])
+    # 第二个写入（upsert 股票池）应含 universe 标记
+    values = multi_values(write_execs(db)[1])
     by_code = {r["code"]: r for r in values}
     assert by_code["600519"]["universe"] == "hs300"
     assert by_code["000001"]["universe"] is None

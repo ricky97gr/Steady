@@ -52,28 +52,39 @@ func main() {
 		log.Fatal("自动迁移失败", zap.Error(err))
 	}
 
-	// 4. 交易/通知/执行服务 + 调度器（Sprint 5：19:35 自动下单 / 21:05 净值快照）
+	// 4. 交易/通知/执行服务 + 调度器（Sprint 5：19:35 自动下单 / 21:05 净值快照 / 21:15 对账校验）
 	tradingSvc := service.NewTradingService(db, cfg.Account)
 	navSvc := service.NewNavService(db, cfg.Account)
 	taskRunSvc := service.NewTaskRunService(db)
 	notifySvc := service.NewNotifyService(db)
 	executeSvc := service.NewExecuteService(db, tradingSvc, navSvc, taskRunSvc, notifySvc)
 	briefSvc := service.NewMorningBriefService(db)
+	consistencySvc := service.NewConsistencyService(db, taskRunSvc, notifySvc)
+	llmSvc := service.NewLLMService(db, briefSvc)
 
 	sched := service.NewScheduler(log)
 	accountRepo := repository.NewAccountRepository(db)
 	dailyRepo := repository.NewDailyRepository(db)
-	sched.Register("auto-trade", 19, 35, func() error {
+	// 每日任务均声明补跑语义：重启后若当天触发时刻已过且当日未执行 → 启动时立即补跑。
+	// 注册顺序即补跑顺序（llm-brief → auto-trade → nav-snapshot → consistency-check），
+	// 其中 llm-brief 依赖 quant-engine 09:10 落库的早报，与交易链无耦合。
+	sched.RegisterCatchUp("llm-brief-interpret", 9, 20, func() error {
+		return runLLMBriefInterpret(log, taskRunSvc, llmSvc, notifySvc)
+	}, catchUpDaily(taskRunSvc, dailyRepo, "llm_brief_interpret"))
+	sched.RegisterCatchUp("auto-trade", 19, 35, func() error {
 		return runAutoTrade(log, taskRunSvc, tradingSvc, accountRepo, dailyRepo)
-	})
-	sched.Register("nav-snapshot", 21, 5, func() error {
+	}, catchUpDaily(taskRunSvc, dailyRepo, "auto_trade"))
+	sched.RegisterCatchUp("nav-snapshot", 21, 5, func() error {
 		return runNavSnapshot(log, taskRunSvc, db, navSvc, accountRepo, dailyRepo)
-	})
+	}, catchUpDaily(taskRunSvc, dailyRepo, "nav_snapshot"))
+	sched.RegisterCatchUp("consistency-check", 21, 15, func() error {
+		return runConsistencyCheck(log, taskRunSvc, consistencySvc, dailyRepo)
+	}, catchUpDaily(taskRunSvc, dailyRepo, "consistency_check"))
 	go sched.Start()
 
 	// 5. 注册路由并启动服务
 	router := api.SetupRouter(db, tradingSvc, navSvc, cfg.Account.InitialCash,
-		taskRunSvc, notifySvc, executeSvc, briefSvc)
+		taskRunSvc, notifySvc, executeSvc, briefSvc, llmSvc)
 	srv := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 		Handler:      router,
@@ -91,6 +102,34 @@ func recordTask(log *zap.Logger, svc *service.TaskRunService, name string, td ti
 	status, msg string, detail interface{}) {
 	if err := svc.Record(name, td, status, msg, detail); err != nil {
 		log.Warn("记录任务执行状态失败", zap.String("task", name), zap.Error(err))
+	}
+}
+
+// catchUpDaily 启动补跑判定：仅当日补跑。最近交易日 == 今天（交易日）且当日该任务
+// 无执行记录 → 需补跑；非交易日/周末（最近交易日 < 今天）返回 false，避免对历史
+// 交易日做无谓的幂等重跑（那会盖掉当日原始台账 detail）。与对应 run 函数同源
+// （GetLatestTradeDate）；无行情数据返回 false（run 函数也会跳过）。
+func catchUpDaily(taskRunSvc *service.TaskRunService, dailyRepo *repository.DailyRepository,
+	taskName string) func() (bool, error) {
+	sh := time.FixedZone("CST", 8*3600)
+	return func() (bool, error) {
+		latest, err := dailyRepo.GetLatestTradeDate()
+		if err != nil {
+			return false, err
+		}
+		if latest == nil {
+			return false, nil // 无行情数据 → 对应 run 函数也会跳过，无需补跑
+		}
+		now := time.Now().In(sh)
+		latestLocal := latest.In(sh)
+		if latestLocal.Year() != now.Year() || latestLocal.YearDay() != now.YearDay() {
+			return false, nil // 最近交易日不是今天（周末/节假日）→ 当日无执行期望
+		}
+		done, err := taskRunSvc.HasRun(taskName, *latest)
+		if err != nil {
+			return false, err
+		}
+		return !done, nil
 	}
 }
 
@@ -184,6 +223,83 @@ func runNavSnapshot(log *zap.Logger, taskRunSvc *service.TaskRunService, db *gor
 		log.Info("净值快照完成", zap.String("trade_date", latest.Format("2006-01-02")),
 			zap.Float64("nav", res.Nav))
 	}
+	return nil
+}
+
+// runConsistencyCheck 21:15 每日对账校验（晚于 21:05 净值快照）。
+// 检查结果与卡片推送由 ConsistencyService.CheckDay 内部处理（台账幂等 upsert）。
+func runConsistencyCheck(log *zap.Logger, taskRunSvc *service.TaskRunService,
+	consistencySvc *service.ConsistencyService,
+	dailyRepo *repository.DailyRepository) error {
+
+	latest, err := dailyRepo.GetLatestTradeDate()
+	if err != nil {
+		return fmt.Errorf("查询最近交易日失败: %w", err)
+	}
+	if latest == nil {
+		log.Info("无行情数据，跳过对账校验")
+		return nil
+	}
+	res, err := consistencySvc.CheckDay(*latest)
+	if err != nil {
+		recordTask(log, taskRunSvc, "consistency_check", *latest, "failed", "对账校验异常",
+			map[string]interface{}{"trade_date": latest.Format("2006-01-02")})
+		return err
+	}
+	if res.Passed {
+		log.Info("对账校验通过", zap.String("trade_date", latest.Format("2006-01-02")),
+			zap.Bool("idle", res.Idle))
+	} else {
+		log.Warn("对账校验未通过", zap.String("trade_date", latest.Format("2006-01-02")),
+			zap.Int("violations", len(res.Violations)))
+	}
+	return nil
+}
+
+// runLLMBriefInterpret 09:20 早盘简报 AI 解读（llm.enabled + 当日简报门控）：
+//   - 未启用 / 无早报 / 最近早报非当日（周末/节假日）→ Info 跳过（不写台账）
+//   - 解读成功 → 写 llm_brief_interpret success 台账（detail=brief_date/chars）+ 飞书卡片（best-effort）
+//   - 解读失败 → 只写 failed 台账并返回 nil（失败可观测、不推送、不阻塞、不触发 30s 重试风暴）
+func runLLMBriefInterpret(log *zap.Logger, taskRunSvc *service.TaskRunService,
+	llmSvc *service.LLMService, notifySvc *service.NotifyService) error {
+
+	en, err := llmSvc.Enabled()
+	if err != nil {
+		return fmt.Errorf("查询大模型配置失败: %w", err)
+	}
+	if !en {
+		log.Info("大模型未启用，跳过简报解读")
+		return nil
+	}
+	res, err := llmSvc.InterpretBrief("") // 空 = 最近一份早报
+	if err != nil {
+		if err == service.ErrNoBrief {
+			log.Info("无早盘简报，跳过解读")
+			return nil
+		}
+		recordTask(log, taskRunSvc, "llm_brief_interpret", time.Now(), "failed",
+			"简报解读失败", map[string]interface{}{"error": err.Error()})
+		log.Warn("早盘简报解读失败（已记台账，不推送）", zap.Error(err))
+		return nil
+	}
+	sh := time.FixedZone("CST", 8*3600)
+	if res.BriefDate != time.Now().In(sh).Format("2006-01-02") {
+		log.Info("最近早报非当日，跳过解读（非交易日）", zap.String("brief_date", res.BriefDate))
+		return nil
+	}
+	briefDate, _ := time.ParseInLocation("2006-01-02", res.BriefDate, time.Local)
+	if err := notifySvc.SendCard("早盘简报 · AI 解读", res.Interpretation, "blue",
+		res.BriefDate); err != nil {
+		log.Warn("简报解读飞书卡片推送失败", zap.Error(err))
+	}
+	recordTask(log, taskRunSvc, "llm_brief_interpret", briefDate, "success",
+		fmt.Sprintf("解读 %d 字", len([]rune(res.Interpretation))),
+		map[string]interface{}{
+			"brief_date": res.BriefDate,
+			"chars":      len([]rune(res.Interpretation)),
+		})
+	log.Info("早盘简报 AI 解读完成", zap.String("brief_date", res.BriefDate),
+		zap.Int("chars", len([]rune(res.Interpretation))))
 	return nil
 }
 

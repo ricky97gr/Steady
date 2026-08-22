@@ -355,8 +355,10 @@ def _check_task_alerts(db, notifier: FeishuNotifier, td: date) -> None:
         select(TaskRun.task_name, TaskRun.message)
         .where(TaskRun.run_date == td, TaskRun.status == "failed")
     ).all()
+    # consistency_check 由 backend 服务推送专属对账卡片，跳过通用告警避免重复红卡
     pending = [(name, msg) for name, msg in failed
-               if not already_run(db, f"alert:{name}", td)]
+               if name != "consistency_check"
+               and not already_run(db, f"alert:{name}", td)]
     if not pending:
         return
     lines = ["**今日执行失败的任务**", ""]

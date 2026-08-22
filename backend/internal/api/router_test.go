@@ -41,10 +41,10 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("连接测试库失败: %v", err)
 	}
-	if err := db.Exec("DROP TABLE IF EXISTS daily_price, financial_indicator, stock_basic CASCADE").Error; err != nil {
+	if err := db.Exec("DROP TABLE IF EXISTS daily_price, financial_indicator, stock_basic, daily_valuation CASCADE").Error; err != nil {
 		t.Fatalf("清理测试表失败: %v", err)
 	}
-	if err := db.AutoMigrate(&model.StockBasic{}, &model.DailyPrice{}, &model.FinancialIndicator{}); err != nil {
+	if err := db.AutoMigrate(&model.StockBasic{}, &model.DailyPrice{}, &model.FinancialIndicator{}, &model.DailyValuation{}); err != nil {
 		t.Fatalf("AutoMigrate 失败: %v", err)
 	}
 	seedTestData(t, db)
@@ -69,7 +69,8 @@ func newTestRouter(t *testing.T) *gin.Engine {
 	notifySvc := service.NewNotifyService(db)
 	executeSvc := service.NewExecuteService(db, tradingSvc, navSvc, taskRunSvc, notifySvc)
 	briefSvc := service.NewMorningBriefService(db)
-	return SetupRouter(db, tradingSvc, navSvc, cfg.InitialCash, taskRunSvc, notifySvc, executeSvc, briefSvc)
+	llmSvc := service.NewLLMService(db, briefSvc)
+	return SetupRouter(db, tradingSvc, navSvc, cfg.InitialCash, taskRunSvc, notifySvc, executeSvc, briefSvc, llmSvc)
 }
 
 // seedTestData 确定性种子数据（手算断言用；AutoMigrate 无唯一约束兜底，仅 setup 时调用一次）

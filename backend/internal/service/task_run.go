@@ -41,6 +41,16 @@ func (s *TaskRunService) Record(taskName string, runDate time.Time,
 	}).Create(&row).Error
 }
 
+// HasRun 指定任务在指定日是否已有执行记录（Scheduler 启动补跑判定用）。
+// best-effort：查询失败返回 (false, err)，由调用方决定是否跳过补跑。
+func (s *TaskRunService) HasRun(taskName string, runDate time.Time) (bool, error) {
+	var n int64
+	err := s.db.Model(&model.TaskRun{}).
+		Where("task_name = ? AND run_date = ?", taskName, runDate).
+		Count(&n).Error
+	return n > 0, err
+}
+
 // ListRecent 最近任务执行记录（页面展示）
 func (s *TaskRunService) ListRecent(limit int) ([]model.TaskRun, error) {
 	if limit <= 0 || limit > 100 {

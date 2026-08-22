@@ -61,12 +61,26 @@ def _daily_sync_codes(db) -> list[str]:
 
 
 def job_sync_daily_price():
-    """16:30 同步当日行情：股票池 + 已有数据，逐只增量"""
-    from app.collectors.daily import DailyCollector
+    """16:30 同步当日行情：Tushare 主源按日全市场快照（2 次调用/天）；
+    失败/未配置降级 AkShare 逐只增量"""
+    from app.collectors.daily import DailyCollector, upsert_daily_rows
+    from app.sources import tushare
 
     db = get_session()
     codes = _daily_sync_codes(db)
     end = date.today()
+    pro = tushare.make_pro(db)
+    if pro is not None:
+        try:
+            rows = tushare.daily_snapshot(pro, end, codes=codes)
+            if not rows:
+                raise RuntimeError("Tushare 快照为空")
+            n = upsert_daily_rows(db, rows)
+            logger.info("Tushare 全市场快照：%s 只入库 %s 条",
+                        len({r["code"] for r in rows}), n)
+            return
+        except Exception as e:
+            logger.warning("Tushare 行情快照失败(%s)，降级 AkShare 逐只", e)
     logger.info("每日行情同步：%s 只股票", len(codes))
     ok = fail = 0
     for code in codes:
@@ -95,18 +109,14 @@ def job_sync_finance():
 
 
 def job_sync_valuation():
-    """16:45 同步日度估值：股票池（接口无日期参数，全量拉取 upsert 幂等）"""
+    """16:45 同步日度估值：Tushare 主源按日全市场快照（1 次调用/天）；
+    失败/未配置降级 AkShare 逐只"""
     from app.collectors.valuation import ValuationCollector
+    from app.db import upsert
     from app.models.tables import DailyValuation, StockBasic
+    from app.sources import tushare
 
     db = get_session()
-    latest = {
-        code: max_d
-        for code, max_d in db.execute(
-            select(DailyValuation.code, func.max(DailyValuation.trade_date))
-            .group_by(DailyValuation.code)
-        ).all()
-    }
     codes = sorted(
         db.execute(
             select(StockBasic.code).where(
@@ -114,6 +124,31 @@ def job_sync_valuation():
             )
         ).scalars().all()
     )
+    pro = tushare.make_pro(db)
+    if pro is not None:
+        try:
+            rows = tushare.daily_basic_snapshot(pro, date.today(), codes=codes)
+            if not rows:
+                raise RuntimeError("Tushare 估值快照为空")
+            upsert(
+                db,
+                DailyValuation,
+                rows,
+                conflict_cols=["code", "trade_date"],
+                update_cols=["close", "total_mv", "float_mv",
+                             "pe_ttm", "pe_static", "pb"],
+            )
+            logger.info("Tushare 全市场估值快照：%s 只入库", len(rows))
+            return
+        except Exception as e:
+            logger.warning("Tushare 估值快照失败(%s)，降级 AkShare 逐只", e)
+    latest = {
+        code: max_d
+        for code, max_d in db.execute(
+            select(DailyValuation.code, func.max(DailyValuation.trade_date))
+            .group_by(DailyValuation.code)
+        ).all()
+    }
     todo = [c for c in codes if latest.get(c) is None or latest[c] < date.today()]
     logger.info("估值同步：%s 只中 %s 只需更新", len(codes), len(todo))
     ok = fail = 0
@@ -137,6 +172,30 @@ def job_sync_hotspot():
     HotspotCollector(get_session()).run(spot_date=date.today())
 
 
+def job_nightly_backfill():
+    """18:05 每日缺口回填（仅交易日）：日线补未覆盖到起始日的股票；估值补滞后股票。
+
+    断点续传天然幂等（covered_codes 按 min(trade_date) 判定），正常日只补新股/缺口
+    （16:30/16:45 已同步当日行情与估值，正常日 todo 为空，分钟级）；
+    首次全量仍由 python -m app.collectors.backfill 手动触发。
+    交易日门控：TradeCalendar.is_open != 1（含无记录）→ 跳过，避免周末/节假日无谓拉取。
+    """
+    from app.collectors.backfill import BackfillJob
+    from app.config import BACKFILL_START
+    from app.models.tables import TradeCalendar
+
+    db = get_session()
+    is_open = db.execute(
+        select(TradeCalendar.is_open).where(TradeCalendar.cal_date == date.today())
+    ).scalar()
+    if not is_open:
+        logger.info("非交易日或日历缺失，跳过夜间回填")
+        return
+    start_date = date.fromisoformat(BACKFILL_START.replace("-", ""))
+    BackfillJob(db).daily(start_date, date.today())
+    BackfillJob(db).valuation()
+
+
 if __name__ == "__main__":
     scheduler = BlockingScheduler()
 
@@ -147,6 +206,7 @@ if __name__ == "__main__":
     scheduler.add_job(job_sync_daily_price, "cron", hour=16, minute=30)
     scheduler.add_job(job_sync_valuation, "cron", hour=16, minute=45)
     scheduler.add_job(job_sync_finance, "cron", hour=18, minute=0)
+    scheduler.add_job(job_nightly_backfill, "cron", hour=18, minute=5)
 
     logger.info("collector 调度器启动，等待定时任务...")
     scheduler.start()
