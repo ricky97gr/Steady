@@ -311,6 +311,43 @@ export interface TushareConfig {
   token_masked: string // 掩码预览 "****abcd"；未配置为 ""
 }
 
+// ---- 大模型能力（LLM）----
+
+export type LLMProvider = 'openai' | 'deepseek' | 'qwen' | 'glm'
+
+export interface LLMConfig {
+  enabled: boolean
+  provider: LLMProvider
+  model: string
+  base_url: string
+  api_key_masked: string // 掩码预览 "****abcd"；未配置为 ""
+}
+
+// 提交入参：api_key 留空 = 保留已存；clear_api_key = true 清空已存 key
+export interface LLMConfigUpdate {
+  enabled: boolean
+  provider: LLMProvider
+  model: string
+  base_url: string
+  api_key?: string
+  clear_api_key?: boolean
+}
+
+export interface TermExplanation {
+  term: string
+  explanation: string
+}
+
+export interface ProjectAnswer {
+  question: string
+  answer: string
+}
+
+export interface BriefInterpretation {
+  brief_date: string
+  interpretation: string
+}
+
 export type TaskRunStatus = 'success' | 'skipped' | 'failed'
 
 export interface TaskRunItem {
@@ -344,7 +381,7 @@ export interface MorningBriefIndexItem {
   name: string
   code: string
   close: number | null
-  change_pct: number | null // 已是百分比数值（0.22 = 0.22%）
+  change_pct: number | null // 已是百分比数值（0.22 = 0.22%)
 }
 
 export interface MorningBriefSectorGainItem {

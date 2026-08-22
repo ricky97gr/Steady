@@ -69,7 +69,8 @@ func newTestRouter(t *testing.T) *gin.Engine {
 	notifySvc := service.NewNotifyService(db)
 	executeSvc := service.NewExecuteService(db, tradingSvc, navSvc, taskRunSvc, notifySvc)
 	briefSvc := service.NewMorningBriefService(db)
-	return SetupRouter(db, tradingSvc, navSvc, cfg.InitialCash, taskRunSvc, notifySvc, executeSvc, briefSvc)
+	llmSvc := service.NewLLMService(db, briefSvc)
+	return SetupRouter(db, tradingSvc, navSvc, cfg.InitialCash, taskRunSvc, notifySvc, executeSvc, briefSvc, llmSvc)
 }
 
 // seedTestData 确定性种子数据（手算断言用；AutoMigrate 无唯一约束兜底，仅 setup 时调用一次）
