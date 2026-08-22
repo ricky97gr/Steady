@@ -3,7 +3,7 @@
 # 生产只发 master：本脚本校验当前分支，非 master 直接拒绝。
 # 产出 deploy/release/steady-<日期>-<短SHA>/ 内含三件套：
 #   install.sh              安装脚本（VM 唯一入口）
-#   config.tar.gz           配置包（compose / nginx.conf / init.sql / config.yaml / .env.example / backup 脚本）
+#   config.tar.gz           配置包（compose / nginx.conf / init.sql / config.yaml / .env.example / backup 脚本 / docs/llm 知识库）
 #   steady-images.tar.gz    业务镜像包（collector / quant-engine / backend / frontend）
 # 传到 VM：scp -r 该目录 → cd 进去 → ./install.sh
 set -euo pipefail
@@ -43,13 +43,16 @@ docker save \
 
 echo "==> 3/4 组装配置包 -> config.tar.gz"
 # 目录结构对齐 run compose 的相对路径：解压到同一目录即可被容器挂载
-mkdir -p "$WORK/nginx" "$WORK/postgres" "$WORK/configs" "$WORK/scripts"
+mkdir -p "$WORK/nginx" "$WORK/postgres" "$WORK/configs" "$WORK/scripts" "$WORK/docs/llm"
 cp "$REPO_ROOT/deploy/docker-compose.run.yml" "$WORK/"
 cp "$REPO_ROOT/deploy/.env.example" "$WORK/"
 cp "$REPO_ROOT/deploy/nginx/nginx.conf" "$WORK/nginx/"
 cp "$REPO_ROOT/deploy/postgres/init.sql" "$WORK/postgres/"
 cp "$REPO_ROOT/backend/configs/config.yaml" "$WORK/configs/"
 cp "$REPO_ROOT/scripts/backup-db.sh" "$WORK/scripts/"
+# LLM 知识库随发布包走（run compose 以 ./docs 挂载进 backend 容器）
+cp "$REPO_ROOT/docs/llm/术语表.md" "$WORK/docs/llm/"
+cp "$REPO_ROOT/docs/llm/项目知识.md" "$WORK/docs/llm/"
 chmod +x "$WORK/scripts/backup-db.sh"
 tar -czf "$RELDIR/config.tar.gz" -C "$WORK" .
 
