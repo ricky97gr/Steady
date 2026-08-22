@@ -2,7 +2,7 @@
 # 原则：VM 只跑镜像，代码以「本地构建 → docker save → 搬运 → docker load」交付。
 # 本文件无任何 build: 段 —— VM 从结构上就不可能编译，缺镜像只会报 pull 错误。
 # 安装/升级/回滚统一用 install.sh（三件套发布目录内）。
-# 自包含：所有挂载相对本目录（nginx/ postgres/ configs/ logs/），整目录可搬到任意位置。
+# 自包含：所有挂载相对本目录（nginx/ postgres/ configs/ logs/ docs/），整目录可搬到任意位置。
 
 services:
   postgres:
@@ -85,6 +85,8 @@ services:
       # 配置留在宿主机（自包含目录内的 configs/），改 config.yaml 后重启容器即生效
       - ./configs/config.yaml:/app/configs/config.yaml
       - ./logs:/app/logs
+      # LLM 知识库只读挂载（发布包自带 docs/llm/ 术语表 + 项目知识）
+      - ./docs:/app/docs:ro
     deploy:
       resources:
         limits:
