@@ -31,16 +31,26 @@ import {
 import dayjs from 'dayjs'
 
 import {
+  getLLMConfig,
   getNotifyConfig,
   getTaskRuns,
   getTushareConfig,
   sendNotifyTest,
+  testLLM,
   testTushare,
   updateFeishuConfig,
+  updateLLMConfig,
   updateNotifyEvent,
   updateTushareConfig,
 } from '../../services/api'
-import type { FeishuConfig, NotifyEvent, TaskRunItem, TushareConfig } from '../../types'
+import type {
+  FeishuConfig,
+  LLMConfig,
+  LLMConfigUpdate,
+  NotifyEvent,
+  TaskRunItem,
+  TushareConfig,
+} from '../../types'
 import { tablePagination } from '../../utils/table'
 
 // 调度方式：weekday=每周几 / trading_day=交易日 / event=事件触发（由业务直接推送）
@@ -64,6 +74,14 @@ const TEMPLATE_OPTIONS = [
   { value: 'blue', label: '蓝' },
   { value: 'green', label: '绿' },
   { value: 'red', label: '红' },
+]
+
+// 大模型 provider（base_url 留空 = 各 provider 默认地址）
+const LLM_PROVIDER_OPTIONS = [
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'deepseek', label: 'DeepSeek' },
+  { value: 'qwen', label: '通义千问（Qwen）' },
+  { value: 'glm', label: '智谱 GLM' },
 ]
 
 // 任务执行记录 → 中文名（未收录的任务原样展示）
@@ -102,21 +120,26 @@ export default function SettingsPage() {
   const [runs, setRuns] = useState<TaskRunItem[]>([])
   const [tushare, setTushare] = useState<TushareConfig | null>(null)
   const [tushareToken, setTushareToken] = useState('')
+  const [llm, setLlm] = useState<LLMConfig | null>(null)
+  const [llmKey, setLlmKey] = useState('')
   const [loading, setLoading] = useState(true)
   const [savingFeishu, setSavingFeishu] = useState(false)
   const [testing, setTesting] = useState(false)
   const [savingKey, setSavingKey] = useState<string | null>(null)
   const [savingTushare, setSavingTushare] = useState(false)
   const [testingTushare, setTestingTushare] = useState(false)
+  const [savingLLM, setSavingLLM] = useState(false)
+  const [testingLLM, setTestingLLM] = useState(false)
 
   const load = () => {
     setLoading(true)
-    Promise.all([getNotifyConfig(), getTaskRuns(50), getTushareConfig()])
-      .then(([cfg, runsData, tushareData]) => {
+    Promise.all([getNotifyConfig(), getTaskRuns(50), getTushareConfig(), getLLMConfig()])
+      .then(([cfg, runsData, tushareData, llmData]) => {
         setFeishu(cfg.feishu)
         setEvents(cfg.events)
         setRuns(runsData.items)
         setTushare(tushareData)
+        setLlm(llmData)
       })
       .catch(() => {
         // 错误已由 axios 拦截器统一弹出，保留空态供重试
@@ -196,6 +219,62 @@ export default function SettingsPage() {
       // 拦截器已提示具体原因（token 无效 / 积分不足等）
     } finally {
       setTestingTushare(false)
+    }
+  }
+
+  // ---- 大模型配置：api_key 留空 = 保留已存；清除走 onClearLLM ----
+  const onSaveLLM = async () => {
+    if (!llm) return
+    setSavingLLM(true)
+    try {
+      const req: LLMConfigUpdate = {
+        enabled: llm.enabled,
+        provider: llm.provider,
+        model: llm.model.trim(),
+        base_url: llm.base_url.trim(),
+      }
+      const key = llmKey.trim()
+      if (key) req.api_key = key
+      await updateLLMConfig(req)
+      setLlm({
+        ...llm,
+        model: llm.model.trim(),
+        base_url: llm.base_url.trim(),
+        api_key_masked: key ? `****${key.slice(-4)}` : llm.api_key_masked,
+      })
+      setLlmKey('')
+      message.success('大模型配置已保存')
+    } catch {
+      // 拦截器已提示
+    } finally {
+      setSavingLLM(false)
+    }
+  }
+
+  const onClearLLM = async () => {
+    if (!llm) return
+    setSavingLLM(true)
+    try {
+      await updateLLMConfig({ ...llm, clear_api_key: true })
+      setLlm({ ...llm, api_key_masked: '' })
+      setLlmKey('')
+      message.success('已清除大模型 API Key')
+    } catch {
+      // 拦截器已提示
+    } finally {
+      setSavingLLM(false)
+    }
+  }
+
+  const onTestLLM = async () => {
+    setTestingLLM(true)
+    try {
+      await testLLM()
+      message.success('大模型连接正常')
+    } catch {
+      // 拦截器已提示具体原因（key 无效 / 网络不通等）
+    } finally {
+      setTestingLLM(false)
     }
   }
 
@@ -302,13 +381,88 @@ export default function SettingsPage() {
           </Card>
         </Col>
         <Col xs={24} lg={10}>
-          <Card title={<Space><RobotOutlined />大模型能力（预留）</Space>}>
+          <Card
+            title={<Space><RobotOutlined />大模型能力</Space>}
+            extra={
+              <Space>
+                <Button icon={<ApiOutlined />} loading={testingLLM} onClick={onTestLLM}>
+                  测试连接
+                </Button>
+                <Button type="primary" icon={<SaveOutlined />} loading={savingLLM} onClick={onSaveLLM}>
+                  保存
+                </Button>
+              </Space>
+            }
+          >
             <Alert
               type="info"
               showIcon
-              message="后续版本接入大模型"
-              description="届时可在此配置 provider / model / api_key / base_url，用于日报、信号点评等内容的 AI 生成。当前版本推送固定内容。"
+              message="云端 API · 简报解读 / 术语解释 / 项目问答"
+              description="provider + base_url 可配（留空用各厂商默认地址）；api_key 仅存数据库、不回显。启用后：早盘简报页「AI 解读」按钮可用，每个交易日 09:20 自动推送 AI 解读飞书卡片。"
+              style={{ marginBottom: 16 }}
             />
+            <Form layout="vertical">
+              <Form.Item label="启用大模型能力">
+                <Switch
+                  checked={llm?.enabled ?? false}
+                  onChange={(v) => llm && setLlm({ ...llm, enabled: v })}
+                />
+              </Form.Item>
+              <Form.Item label="提供商">
+                <Select
+                  style={{ width: '100%' }}
+                  value={llm?.provider ?? 'openai'}
+                  options={LLM_PROVIDER_OPTIONS}
+                  onChange={(v: LLMConfig['provider']) => llm && setLlm({ ...llm, provider: v })}
+                />
+              </Form.Item>
+              <Form.Item label="模型名称" extra="例如 deepseek-chat / qwen-plus / glm-4-flash / gpt-4o-mini">
+                <Input
+                  value={llm?.model ?? ''}
+                  onChange={(e) => llm && setLlm({ ...llm, model: e.target.value })}
+                  placeholder="必填，如 deepseek-chat"
+                />
+              </Form.Item>
+              <Form.Item label="Base URL" extra="留空 = 所选提供商默认地址">
+                <Input
+                  value={llm?.base_url ?? ''}
+                  onChange={(e) => llm && setLlm({ ...llm, base_url: e.target.value })}
+                  placeholder="https://api.deepseek.com/v1（留空用默认）"
+                />
+              </Form.Item>
+              <Form.Item
+                label="API Key"
+                extra={
+                  llm?.api_key_masked
+                    ? `已配置（掩码 ${llm.api_key_masked}），留空保存保持当前 key`
+                    : '未配置 API Key'
+                }
+              >
+                <Space.Compact style={{ width: '100%' }}>
+                  <Input.Password
+                    value={llmKey}
+                    onChange={(e) => setLlmKey(e.target.value)}
+                    placeholder={
+                      llm?.api_key_masked ? '已配置，留空保持当前 key' : '粘贴大模型 API Key'
+                    }
+                    autoComplete="off"
+                  />
+                  {llm?.api_key_masked && (
+                    <Popconfirm
+                      title="确认清除大模型 API Key？"
+                      description="清除后大模型能力将停用。"
+                      onConfirm={onClearLLM}
+                      okText="清除"
+                      okButtonProps={{ danger: true }}
+                    >
+                      <Button type="link" danger loading={savingLLM}>
+                        清除
+                      </Button>
+                    </Popconfirm>
+                  )}
+                </Space.Compact>
+              </Form.Item>
+            </Form>
           </Card>
         </Col>
       </Row>
