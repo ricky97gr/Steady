@@ -60,12 +60,17 @@ func main() {
 	executeSvc := service.NewExecuteService(db, tradingSvc, navSvc, taskRunSvc, notifySvc)
 	briefSvc := service.NewMorningBriefService(db)
 	consistencySvc := service.NewConsistencyService(db, taskRunSvc, notifySvc)
+	llmSvc := service.NewLLMService(db, briefSvc)
 
 	sched := service.NewScheduler(log)
 	accountRepo := repository.NewAccountRepository(db)
 	dailyRepo := repository.NewDailyRepository(db)
-	// 三个每日任务均声明补跑语义：重启后若当天触发时刻已过且当日未执行 → 启动时立即补跑。
-	// 注册顺序即补跑顺序（auto-trade → nav-snapshot → consistency-check），保持数据依赖链。
+	// 每日任务均声明补跑语义：重启后若当天触发时刻已过且当日未执行 → 启动时立即补跑。
+	// 注册顺序即补跑顺序（llm-brief → auto-trade → nav-snapshot → consistency-check），
+	// 其中 llm-brief 依赖 quant-engine 09:10 落库的早报，与交易链无耦合。
+	sched.RegisterCatchUp("llm-brief-interpret", 9, 20, func() error {
+		return runLLMBriefInterpret(log, taskRunSvc, llmSvc, notifySvc)
+	}, catchUpDaily(taskRunSvc, dailyRepo, "llm_brief_interpret"))
 	sched.RegisterCatchUp("auto-trade", 19, 35, func() error {
 		return runAutoTrade(log, taskRunSvc, tradingSvc, accountRepo, dailyRepo)
 	}, catchUpDaily(taskRunSvc, dailyRepo, "auto_trade"))
@@ -79,7 +84,7 @@ func main() {
 
 	// 5. 注册路由并启动服务
 	router := api.SetupRouter(db, tradingSvc, navSvc, cfg.Account.InitialCash,
-		taskRunSvc, notifySvc, executeSvc, briefSvc)
+		taskRunSvc, notifySvc, executeSvc, briefSvc, llmSvc)
 	srv := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 		Handler:      router,
@@ -248,6 +253,53 @@ func runConsistencyCheck(log *zap.Logger, taskRunSvc *service.TaskRunService,
 		log.Warn("对账校验未通过", zap.String("trade_date", latest.Format("2006-01-02")),
 			zap.Int("violations", len(res.Violations)))
 	}
+	return nil
+}
+
+// runLLMBriefInterpret 09:20 早盘简报 AI 解读（llm.enabled + 当日简报门控）：
+//   - 未启用 / 无早报 / 最近早报非当日（周末/节假日）→ Info 跳过（不写台账）
+//   - 解读成功 → 写 llm_brief_interpret success 台账（detail=brief_date/chars）+ 飞书卡片（best-effort）
+//   - 解读失败 → 只写 failed 台账并返回 nil（失败可观测、不推送、不阻塞、不触发 30s 重试风暴）
+func runLLMBriefInterpret(log *zap.Logger, taskRunSvc *service.TaskRunService,
+	llmSvc *service.LLMService, notifySvc *service.NotifyService) error {
+
+	en, err := llmSvc.Enabled()
+	if err != nil {
+		return fmt.Errorf("查询大模型配置失败: %w", err)
+	}
+	if !en {
+		log.Info("大模型未启用，跳过简报解读")
+		return nil
+	}
+	res, err := llmSvc.InterpretBrief("") // 空 = 最近一份早报
+	if err != nil {
+		if err == service.ErrNoBrief {
+			log.Info("无早盘简报，跳过解读")
+			return nil
+		}
+		recordTask(log, taskRunSvc, "llm_brief_interpret", time.Now(), "failed",
+			"简报解读失败", map[string]interface{}{"error": err.Error()})
+		log.Warn("早盘简报解读失败（已记台账，不推送）", zap.Error(err))
+		return nil
+	}
+	sh := time.FixedZone("CST", 8*3600)
+	if res.BriefDate != time.Now().In(sh).Format("2006-01-02") {
+		log.Info("最近早报非当日，跳过解读（非交易日）", zap.String("brief_date", res.BriefDate))
+		return nil
+	}
+	briefDate, _ := time.ParseInLocation("2006-01-02", res.BriefDate, time.Local)
+	if err := notifySvc.SendCard("早盘简报 · AI 解读", res.Interpretation, "blue",
+		res.BriefDate); err != nil {
+		log.Warn("简报解读飞书卡片推送失败", zap.Error(err))
+	}
+	recordTask(log, taskRunSvc, "llm_brief_interpret", briefDate, "success",
+		fmt.Sprintf("解读 %d 字", len([]rune(res.Interpretation))),
+		map[string]interface{}{
+			"brief_date": res.BriefDate,
+			"chars":      len([]rune(res.Interpretation)),
+		})
+	log.Info("早盘简报 AI 解读完成", zap.String("brief_date", res.BriefDate),
+		zap.Int("chars", len([]rune(res.Interpretation))))
 	return nil
 }
 
